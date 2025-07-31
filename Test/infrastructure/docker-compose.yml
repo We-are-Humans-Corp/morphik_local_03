@@ -1,0 +1,72 @@
+# ОБЩАЯ ИНФРАСТРУКТУРА ДЛЯ ВСЕХ ВЕРСИЙ MORPHIK
+# Запускается ОДИН РАЗ и используется всеми версиями
+
+version: '3.8'
+
+services:
+  # Ollama - сервер для LLM моделей
+  ollama:
+    image: ollama/ollama:latest
+    container_name: morphik_ollama_shared
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - morphik_shared_network
+    restart: unless-stopped
+
+  # Redis - очереди и кеш
+  redis:
+    image: redis:7-alpine
+    container_name: morphik_redis_shared
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - morphik_shared_network
+    restart: unless-stopped
+
+  # PostgreSQL с pgvector для векторного поиска
+  postgres_shared:
+    image: pgvector/pgvector:pg16
+    container_name: morphik_postgres_shared
+    shm_size: 128mb
+    environment:
+      - POSTGRES_USER=morphik
+      - POSTGRES_PASSWORD=morphik
+      - POSTGRES_MULTIPLE_DATABASES=morphik_stable,morphik_experimental
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U morphik"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - morphik_shared_network
+    restart: unless-stopped
+
+networks:
+  morphik_shared_network:
+    name: morphik_shared_network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: morphik_postgres_data
+  ollama_data:
+    name: morphik_ollama_data
+  redis_data:
+    name: morphik_redis_data
