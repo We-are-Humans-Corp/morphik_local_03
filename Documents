@@ -1,0 +1,40 @@
+ 1. Образы Docker (908MB):
+    - morphik-ui.tar.gz (66MB)
+    - morphik-api.tar.gz (208MB)
+    - morphik-worker.tar.gz (256MB)
+    - morphik-postgres.tar.gz (378MB)
+  2. Скрипты:
+    - start-morphik.sh - запускает всё одной командой
+    - stop-morphik.sh - останавливает всё
+  3. README.md - инструкция
+
+
+   Для входа используйте:
+  - Username: testuser
+  - Password: testpassword123
+
+
+  Теперь для запуска всей системы достаточно:
+  cd final_19.07.2024
+  ./start-morphik.sh
+
+
+
+
+Вы можете открыть в браузере:
+  - http://135.181.106.12:3000 - интерфейс Morphik
+  - http://135.181.106.12:8000/docs - API документация
+
+  Для входа используйте:
+  - Username: testuser
+  - Password: testpassword123
+
+> пароль какой
+
+⏺ Пароль: testpassword123
+
+  Полные данные для входа:
+  - Username: testuser
+  - Password: testpassword123
+
+  Эти учетные данные мы создали ранее при настройке аутентификации.
