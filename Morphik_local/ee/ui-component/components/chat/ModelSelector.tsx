@@ -204,9 +204,24 @@ export function ModelSelector({
   // Special handling for default model
   const displayName = currentModel === "default" ? "Morphik (default)" : selectedModelData?.name || "Select model";
   const isModelAvailable = (model: Model) => {
-    // In self-hosted mode, show all models
-    // The backend will handle API key validation
-    return true;
+    // Ollama модели всегда доступны (локальные)
+    if (model.id.startsWith("ollama_")) return true;
+    
+    // Custom модели пользователя всегда доступны  
+    if (model.id.startsWith("custom_")) return true;
+    
+    // Проверяем наличие ключей для провайдеров по префиксу ID
+    if (model.id.startsWith("claude_") && availableProviders.has("anthropic")) return true;
+    if (model.id.startsWith("openai_") && availableProviders.has("openai")) return true;
+    if (model.id.startsWith("azure_") && availableProviders.has("azure")) return true;
+    if (model.id.startsWith("gemini_") && availableProviders.has("google")) return true;
+    if (model.id.startsWith("groq_") && availableProviders.has("groq")) return true;
+    if (model.id.startsWith("deepseek_") && availableProviders.has("deepseek")) return true;
+    
+    // Fallback для configured провайдера (серверные ключи)
+    if (model.provider === "configured") return true;
+    
+    return false;
   };
 
   const handleModelSelect = (model: Model) => {

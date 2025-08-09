@@ -50,15 +50,20 @@ export function useModels(apiBaseUrl: string, authToken: string | null) {
         setLoading(true);
         setError(null);
 
+        console.log("🔄 Fetching models from:", `${apiBaseUrl}/models`);
+        console.log("🔐 Auth token present:", !!authToken);
+
         const response = await fetch(`${apiBaseUrl}/models`, {
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
         });
 
         if (!response.ok) {
+          console.error("❌ API error:", response.status, response.statusText);
           throw new Error(`Failed to fetch models: ${response.statusText}`);
         }
 
         const data: ModelAPIResponse = await response.json();
+        console.log("📦 API response:", data);
         let transformedModels: Model[] = [];
 
         // Handle different response formats
@@ -81,6 +86,7 @@ export function useModels(apiBaseUrl: string, authToken: string | null) {
           timestamp: Date.now(),
         });
 
+        console.log("✅ Models loaded:", transformedModels.length, "models");
         setModels(transformedModels);
         return transformedModels;
       } catch (err) {
