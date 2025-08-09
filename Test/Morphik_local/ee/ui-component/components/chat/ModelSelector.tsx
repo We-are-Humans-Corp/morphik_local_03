@@ -204,9 +204,21 @@ export function ModelSelector({
   // Special handling for default model
   const displayName = currentModel === "default" ? "Morphik (default)" : selectedModelData?.name || "Select model";
   const isModelAvailable = (model: Model) => {
-    // In self-hosted mode, show all models
-    // The backend will handle API key validation
-    return true;
+    // Ollama модели всегда доступны (локальные)
+    if (model.id.startsWith("ollama_")) return true;
+    
+    // Custom модели пользователя всегда доступны  
+    if (model.id.startsWith("custom_")) return true;
+    
+    // Проверяем наличие ключей для провайдеров по префиксу ID
+    if (model.id.startsWith("claude_") && availableProviders.has("anthropic")) return true;
+    if (model.id.startsWith("openai_") && availableProviders.has("openai")) return true;
+    if (model.id.startsWith("azure_") && availableProviders.has("azure")) return true;
+    if (model.id.startsWith("gemini_") && availableProviders.has("google")) return true;
+    if (model.id.startsWith("groq_") && availableProviders.has("groq")) return true;
+    if (model.id.startsWith("deepseek_") && availableProviders.has("deepseek")) return true;
+    
+    return false;
   };
 
   const handleModelSelect = (model: Model) => {
@@ -265,55 +277,33 @@ export function ModelSelector({
               </div>
             </div>
 
-            {models.map(model => {
-              const isAvailable = isModelAvailable(model);
-              console.log(`Model ${model.name} (${model.id}): provider=${model.provider}, available=${isAvailable}`);
+            {models
+              .filter(model => {
+                const available = isModelAvailable(model);
+                console.log(`Model ${model.id}: available=${available}, providers:`, Array.from(availableProviders));
+                return available;
+              })  // Only show available models
+              .map(model => {
+              const isAvailable = true; // We've already filtered, so all shown models are available
+              console.log(`Showing model ${model.name} (${model.id}): provider=${model.provider}`);
 
               return (
                 <div
                   key={model.id}
                   className={cn(
                     "group relative flex items-start gap-2 rounded-md px-2 py-2 text-sm",
-                    isAvailable ? "cursor-pointer hover:bg-accent" : "cursor-not-allowed opacity-50",
+                    "cursor-pointer hover:bg-accent",
                     currentModel === model.id && "bg-accent"
                   )}
                   onClick={() => handleModelSelect(model)}
-                  onMouseEnter={e => {
-                    if (!isAvailable) {
-                      const tooltip = e.currentTarget.querySelector(".tooltip") as HTMLElement;
-                      if (tooltip) tooltip.style.display = "block";
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (!isAvailable) {
-                      const tooltip = e.currentTarget.querySelector(".tooltip") as HTMLElement;
-                      if (tooltip) tooltip.style.display = "none";
-                    }
-                  }}
                 >
                   <span className="text-base">{providerIcons[model.provider] || "●"}</span>
                   <div className="flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="font-medium">{model.name}</span>
-                      {!isAvailable && <Lock className="h-3 w-3" />}
                     </div>
                     {model.description && <div className="text-xs text-muted-foreground">{model.description}</div>}
                   </div>
-
-                  {/* Hover tooltip for locked models */}
-                  {!isAvailable && (
-                    <div
-                      className="tooltip absolute bottom-full left-1/2 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-popover-foreground px-2 py-1 text-xs text-popover"
-                      style={{ display: "none" }}
-                      onClick={e => {
-                        e.stopPropagation();
-                        onRequestApiKey?.(model.provider);
-                        setIsOpen(false);
-                      }}
-                    >
-                      Add API key →
-                    </div>
-                  )}
                 </div>
               );
             })}

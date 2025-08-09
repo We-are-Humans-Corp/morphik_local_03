@@ -563,6 +563,8 @@ const ChatSection: React.FC<ChatSectionProps> = ({
           // Clear chat cache when switching to ensure fresh data
           clearChatCache(chatId, apiBaseUrl);
           setChatId(id ?? generateUUID());
+          // Clear agent messages when switching chats
+          setAgentMessages([]);
         }}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(prev => !prev)}

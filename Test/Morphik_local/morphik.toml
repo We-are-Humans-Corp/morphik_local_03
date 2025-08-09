@@ -34,8 +34,8 @@ gemini_flash = { model_name = "gemini/gemini-2.5-flash-preview-05-20" } # gemini
 # - Morphik in Docker, Ollama local: "http://host.docker.internal:11434"
 # - Both in Docker: "http://ollama:11434"
 # ollama_qwen_vision = { model_name = "gpt-4.1" } # {model_name = "groq/meta-llama/llama-4-scout-17b-16e-instruct"} #{ model_name = "ollama_chat/qwen2.5vl:latest", api_base = "http://localhost:11434", vision = true }
-ollama_llama = { model_name = "ollama/llama3.2:3b", api_base = "http://ollama:11434" }
-ollama_embedding = { model_name = "ollama/nomic-embed-text", api_base = "http://ollama:11434" }
+ollama_llama = { model_name = "ollama/llama3.2:3b", api_base = "http://135.181.106.12:11434" }
+ollama_embedding = { model_name = "ollama/nomic-embed-text", api_base = "http://135.181.106.12:11434" }
 
 openai_embedding = { model_name = "text-embedding-3-small" }
 openai_embedding_large = { model_name = "text-embedding-3-large" }
@@ -48,7 +48,7 @@ azure_embedding = { model_name = "text-embedding-ada-002", api_base = "YOUR_AZUR
 model = "ollama_llama" # Model for the agent logic
 
 [completion]
-model = "ollama_llama" #"openai_gpt4-1-mini"  # Reference to a key in registered_models
+model = "claude_sonnet" # Используем Claude для быстрых ответов
 default_max_tokens = "1000"
 default_temperature = 0.3
 

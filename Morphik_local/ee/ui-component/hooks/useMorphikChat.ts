@@ -118,13 +118,18 @@ export function useMorphikChat({
           // Cache the messages
           chatHistoryCache.set(cacheKey, messages);
           setMessages(messages);
+        } else {
+          // If chat doesn't exist, clear messages for new chat
+          setMessages([]);
         }
       } catch (err) {
         console.error("Failed to load chat history", err);
+        // Clear messages on error
+        setMessages([]);
       }
     };
     fetchHistory();
-  }, [chatId, apiBaseUrl, authToken]);
+  }, [chatId, apiBaseUrl, authToken, setMessages]);
 
   const [queryOptions, setQueryOptions] = useState<QueryOptions>({
     filters: initialQueryOptions.filters ?? "{}",

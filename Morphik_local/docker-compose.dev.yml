@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  ui:
+    volumes:
+      # Монтируем исходный код для hot reload
+      - ./ee/ui-component:/app
+      - /app/node_modules  # Исключаем node_modules
+      - /app/.next         # Исключаем build папку
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true  # Для работы на macOS/Windows
+    command: npm run dev  # Запускаем в dev режиме
+
+  morphik:
+    volumes:
+      # Монтируем Python код
+      - ./core:/app/core
+      - ./ee:/app/ee
+    environment:
+      - RELOAD=true  # Включаем auto-reload для FastAPI
+    command: uvicorn core.api:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    volumes:
+      # Монтируем код воркера
+      - ./core:/app/core
+      - ./ee:/app/ee

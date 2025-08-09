@@ -17,6 +17,7 @@ services:
     build: .
     ports:
       - "8000:8000"
+    entrypoint: ["/bin/sh", "-c", "exec uv run uvicorn core.api:app --host 0.0.0.0 --port 8000 --reload"]
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-here}
       - POSTGRES_URI=postgresql+asyncpg://morphik:morphik@135.181.106.12:5432/morphik
@@ -66,65 +67,12 @@ services:
     env_file:
       - .env
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - morphik-network
-
-  postgres:
-    build:
-      context: .
-      dockerfile: postgres.dockerfile
-    shm_size: 128mb
-    environment:
-      - POSTGRES_USER=morphik
-      - POSTGRES_PASSWORD=morphik
-      - POSTGRES_DB=morphik
-      - PGDATA=/var/lib/postgresql/data/pgdata
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U morphik -d morphik"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - morphik-network
-
-  ollama:
-    image: ollama/ollama:latest
-    profiles:
-      - ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
-    networks:
-      - morphik-network
-    entrypoint: ["/ollama-entrypoint.sh"]
-
   ui:
     build:
       context: ./ee/ui-component
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
-    # profiles:
-    #   - ""  # Пустой профиль означает запуск по умолчанию
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - INTERNAL_API_URL=http://morphik:8000
@@ -139,7 +87,4 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
-  ollama_data:
   huggingface_cache:
-  redis_data:
