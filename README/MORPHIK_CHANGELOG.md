@@ -1,6 +1,64 @@
 # Morphik Changelog
 
-## [Current] - 2025-07-31
+## [Current] - 2025-08-19
+
+### Fixed
+- Worker container connection to remote PostgreSQL (135.181.106.12)
+- Docker entrypoint script now correctly handles remote services
+- Removed duplicate local Redis and Ollama containers that were not being used
+- Fixed PostgreSQL URI format conversion for asyncpg (postgresql+asyncpg:// -> postgresql://)
+
+### Changed
+- Created custom docker-entrypoint.sh that properly checks remote PostgreSQL connection
+- Modified docker-compose.local.yml to use custom entrypoint via volume mount
+- Optimized container architecture: only API, Worker, and UI run locally
+- All heavy services (PostgreSQL, Redis, Ollama) now correctly use remote server
+
+### Technical Details
+- Problem: Worker container was trying to connect to local 'postgres' hostname instead of remote IP
+- Solution: Custom entrypoint script that:
+  - Extracts PostgreSQL host from POSTGRES_URI environment variable
+  - Converts SQLAlchemy URI format to asyncpg format
+  - Uses Python asyncpg to verify connection with proper timeout and retry logic
+- Implementation: Volume mount docker-entrypoint.sh as /app/docker-entrypoint-custom.sh in worker service
+
+## [Previous] - 2025-08-18
+
+### Fixed
+- Model filtering now correctly shows only available models based on API keys
+- Removed duplicate model entries in UI (eliminated "Custom model" duplicates)
+- User authentication system - corrected password hashing format
+- Updated all documentation with correct login credentials
+- Fixed morphik.toml to comment out models without API keys
+
+### Added
+- Smart model filtering based on available API keys in database
+- New `create_user.py` script for user management
+- `UserData.md` documentation file with complete authentication details
+- Support for multiple user accounts (test@example.com, fedor@example.com)
+- ModelSelectorHeader component for potential header placement
+
+### Changed
+- Model availability now determined by API keys stored in database (not env vars)
+- Authentication now uses email as username (e.g., test@example.com)
+- Password hashing uses SHA256 with salt format: {salt}${hash}
+- Updated all README files with correct login credentials
+- Disabled custom models endpoint to prevent duplicates
+- Models endpoint now returns only genuinely available models
+
+### Technical Improvements
+- Backend `/models` endpoint filters based on database-stored API keys
+- Ollama models always available (local, no key required)
+- Removed redundant custom models loading in UI
+- Improved model provider detection logic
+
+### Documentation
+- Created comprehensive UserData.md with authentication details
+- Updated README files in both /README/ and /Test/Morphik_local/
+- Added troubleshooting guide for authentication issues
+- Corrected architecture description (hybrid local/remote setup)
+
+## [Previous] - 2025-07-31
 
 ### Added
 - Separated infrastructure setup for shared services (Ollama, Redis, PostgreSQL)
@@ -80,10 +138,12 @@
 - Secure session management with Redis
 
 ### Infrastructure
-- All services running in Docker containers
-- Proper port mappings and network configuration
-- Volume persistence for data
-- Health checks for service monitoring
+- Hybrid architecture: core services in Docker, shared resources on remote server
+- Backend API and Worker running in local Docker containers
+- PostgreSQL and Ollama hosted on remote server (135.181.106.12)
+- UI runs locally via npm dev server (development) or Docker (production)
+- Proper network configuration for local-remote communication
+- Volume persistence for local data storage
 
 ## Migration Notes
 

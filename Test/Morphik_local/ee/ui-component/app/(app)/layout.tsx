@@ -6,6 +6,7 @@ import { MorphikSidebarStateful } from '@/components/morphik-sidebar-stateful'
 import { DynamicSiteHeader } from '@/components/dynamic-site-header'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar-new'
 import { HeaderProvider } from '@/contexts/header-context'
+import { ChatProvider } from '@/contexts/chat-context'
 import { useMorphik } from '@/contexts/morphik-context'
 
 type ValidSection = 'documents' | 'pdf' | 'search' | 'chat' | 'graphs' | 'workflows' | 'connections' | 'settings' | 'logs'
@@ -72,25 +73,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-sidebar">
       <HeaderProvider>
-        <SidebarProvider
-          style={{
-            '--sidebar-width': 'calc(var(--spacing) * 72)',
-            '--header-height': 'calc(var(--spacing) * 12)',
-          } as React.CSSProperties}
-        >
-          <MorphikSidebarStateful
-            variant="inset"
-            currentSection={currentSection}
-            onSectionChange={handleSectionChange}
-            userProfile={userProfile || undefined}
-            onLogout={handleLogout}
-            onProfileNavigate={handleProfileNavigate}
-          />
-          <SidebarInset>
-            <DynamicSiteHeader userProfile={userProfile || undefined} />
-            <div className="flex flex-1 flex-col p-4 md:p-6">{children}</div>
-          </SidebarInset>
-        </SidebarProvider>
+        <ChatProvider>
+          <SidebarProvider
+            style={{
+              '--sidebar-width': 'calc(var(--spacing) * 72)',
+              '--header-height': 'calc(var(--spacing) * 12)',
+            } as React.CSSProperties}
+          >
+            <MorphikSidebarStateful
+              variant="inset"
+              currentSection={currentSection}
+              onSectionChange={handleSectionChange}
+              userProfile={userProfile || undefined}
+              onLogout={handleLogout}
+              onProfileNavigate={handleProfileNavigate}
+            />
+            <SidebarInset>
+              <DynamicSiteHeader userProfile={userProfile || undefined} />
+              <div className="flex flex-1 flex-col p-4 md:p-6">{children}</div>
+            </SidebarInset>
+          </SidebarProvider>
+        </ChatProvider>
       </HeaderProvider>
     </div>
   )

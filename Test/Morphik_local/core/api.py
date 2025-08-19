@@ -168,66 +168,110 @@ async def ping_health():
 
 @app.get("/models")
 async def get_available_models(auth: AuthContext = Depends(verify_token)):
-    """
-    Get list of available models from configuration.
-
-    Returns models grouped by type (chat, embedding, etc.) with their metadata.
-    """
+    """Get list of available models based on configured API keys."""
     try:
-        # Load the morphik.toml file to get registered models
+        # Загружаем конфигурацию
         with open("morphik.toml", "rb") as f:
             config = tomli.load(f)
-
         registered_models = config.get("registered_models", {})
-
-        # Group models by their purpose
+        
+        # ✅ НОВОЕ: Проверяем доступные API ключи
+        available_providers = await _get_available_providers(auth)
+        
         chat_models = []
         embedding_models = []
-
+        
         for model_key, model_config in registered_models.items():
-            model_info = {
-                "id": model_key,
-                "model": model_config.get("model_name", model_key),
-                "provider": _extract_provider(model_config.get("model_name", "")),
-                "config": model_config,
-            }
-
-            # Categorize models based on their names or configuration
-            if "embedding" in model_key.lower():
-                embedding_models.append(model_info)
-            else:
-                chat_models.append(model_info)
-
-        # Also add the default configured models
+            provider = _extract_provider(model_config.get("model_name", ""))
+            
+            # ✅ ФИЛЬТРАЦИЯ: Только модели с доступными ключами
+            if _is_provider_available(provider, available_providers):
+                model_info = {
+                    "id": model_key,
+                    "model": model_config.get("model_name", model_key),
+                    "provider": provider,
+                    "config": model_config,
+                }
+                
+                if "embedding" in model_key.lower():
+                    embedding_models.append(model_info)
+                else:
+                    chat_models.append(model_info)
+        
+        # Добавляем дефолтные модели если есть ключи
         default_models = {
             "completion": config.get("completion", {}).get("model"),
-            "agent": config.get("agent", {}).get("model"),
+            "agent": config.get("agent", {}).get("model"), 
             "embedding": config.get("embedding", {}).get("model"),
         }
-
+        
         return {
             "chat_models": chat_models,
             "embedding_models": embedding_models,
             "default_models": default_models,
-            "providers": ["openai", "anthropic", "google", "azure", "ollama", "custom"],
+            "providers": list(available_providers),
         }
+        
     except Exception as e:
         logger.error(f"Error loading models: {e}")
         raise HTTPException(status_code=500, detail="Failed to load available models")
 
 
+async def _get_available_providers(auth: AuthContext) -> set:
+    """Check which providers have valid API keys stored in database."""
+    providers = set()
+    
+    try:
+        # Проверяем API ключи из базы данных
+        if auth.user_id and auth.app_id:
+            configs = await document_service.db.get_model_configs(
+                user_id=auth.user_id,
+                app_id=auth.app_id
+            )
+            
+            # Проверяем каждый провайдер
+            for config in configs:
+                # Добавляем провайдер если есть apiKey в конфигурации
+                if config.config_data.get("apiKey"):
+                    providers.add(config.provider)
+        
+        # Ollama всегда доступен (локальный, не требует ключа)
+        providers.add("ollama")
+        
+    except Exception as e:
+        logger.warning(f"Failed to check API keys: {e}")
+        # Fallback: показываем только локальные модели
+        providers.add("ollama")
+    
+    return providers
+
+
+def _is_provider_available(provider: str, available_providers: set) -> bool:
+    """Check if provider is available based on API keys."""
+    # Только Ollama всегда доступен (локальный)
+    if provider == "ollama":
+        return True
+        
+    # Все остальные провайдеры требуют API ключи
+    return provider in available_providers
+
+
 def _extract_provider(model_name: str) -> str:
     """Extract provider from model name."""
-    if model_name.startswith("gpt"):
+    if model_name.startswith("gpt") or model_name.startswith("text-embedding"):
         return "openai"
-    elif model_name.startswith("claude"):
+    elif model_name.startswith("anthropic/") or model_name.startswith("claude"):
         return "anthropic"
-    elif model_name.startswith("gemini"):
+    elif model_name.startswith("gemini/"):
         return "google"
-    elif model_name.startswith("ollama"):
+    elif model_name.startswith("ollama/"):
         return "ollama"
-    elif "azure" in model_name:
+    elif "azure" in model_name.lower():
         return "azure"
+    elif model_name.startswith("groq/"):
+        return "groq"
+    elif model_name.startswith("deepseek/"):
+        return "deepseek"
     else:
         return "custom"
 

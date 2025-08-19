@@ -39,12 +39,12 @@ export function useModels(apiBaseUrl: string, authToken: string | null) {
       const cacheKey = apiBaseUrl;
       const cached = modelsCache.get(cacheKey);
 
-      // Check if we have valid cached data
-      if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        setModels(cached.models);
-        setLoading(false);
-        return cached.models;
-      }
+      // DISABLED CACHE - always fetch fresh data
+      // if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      //   setModels(cached.models);
+      //   setLoading(false);
+      //   return cached.models;
+      // }
 
       try {
         setLoading(true);
@@ -53,6 +53,9 @@ export function useModels(apiBaseUrl: string, authToken: string | null) {
         console.log("🔄 Fetching models from:", `${apiBaseUrl}/models`);
         console.log("🔐 Auth token present:", !!authToken);
 
+        console.log("🚀 Fetching from URL:", `${apiBaseUrl}/models`);
+        console.log("🔑 Using auth token:", authToken);
+        
         const response = await fetch(`${apiBaseUrl}/models`, {
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
         });

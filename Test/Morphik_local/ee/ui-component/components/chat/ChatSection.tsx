@@ -23,6 +23,7 @@ import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { AgentPreviewMessage, AgentUIMessage, DisplayObject, SourceObject, ToolCall } from "./AgentChatMessages";
 import { ModelSelector } from "./ModelSelector";
 import { useHeader } from "@/contexts/header-context";
+import { useChat } from "@/contexts/chat-context";
 
 interface ChatSectionProps {
   apiBaseUrl: string;

@@ -29,6 +29,7 @@ services:
       - REDIS_PORT=6379
       - OLLAMA_BASE_URL=http://135.181.106.12:11434
     volumes:
+      - ./core:/app/core
       - ./storage:/app/storage
       - ./logs:/app/logs
       - ./morphik.toml:/app/morphik.toml
@@ -46,6 +47,7 @@ services:
       context: .
       dockerfile: dockerfile
     command: arq core.workers.ingestion_worker.WorkerSettings
+    entrypoint: ["/app/docker-entrypoint-custom.sh"]
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-here}
       - POSTGRES_URI=postgresql+asyncpg://morphik:morphik@135.181.106.12:5432/morphik
@@ -55,6 +57,8 @@ services:
       - REDIS_PORT=6379
       - OLLAMA_BASE_URL=http://135.181.106.12:11434
     volumes:
+      - ./docker-entrypoint.sh:/app/docker-entrypoint-custom.sh
+      - ./core:/app/core
       - ./storage:/app/storage
       - ./logs:/app/logs
       - ./morphik.toml:/app/morphik.toml

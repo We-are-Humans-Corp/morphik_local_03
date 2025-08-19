@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { IconCreditCard, IconLogout, IconUserCircle, IconChevronUp, IconChevronDown } from "@tabler/icons-react";
+import { IconCreditCard, IconLogout, IconUserCircle, IconChevronUp, IconChevronDown, IconSparkles } from "@tabler/icons-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar-new";
@@ -41,7 +41,18 @@ export function NavUser({ user, onLogout, onProfileNavigate }: NavUserProps) {
       </SidebarMenuItem>
 
       {/* Expandable menu items */}
-      <div className={cn("overflow-hidden transition-all duration-200", isOpen ? "max-h-48" : "max-h-0")}>
+      <div className={cn("overflow-hidden transition-all duration-200", isOpen ? "max-h-64" : "max-h-0")}>
+        {/* Upgrade Button for Free Users */}
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
+            onClick={() => window.open("https://morphik.ai/pricing", "_blank")}
+          >
+            <IconSparkles />
+            <span>Upgrade to Pro</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        
         <SidebarMenuItem>
           <SidebarMenuButton
             onClick={e => {

@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useMorphik } from '@/contexts/morphik-context'
 
 export default function LoginPage() {
+  console.log('LoginPage rendering...')
   const router = useRouter()
   const { setAuthToken } = useMorphik()
   const [username, setUsername] = useState('')

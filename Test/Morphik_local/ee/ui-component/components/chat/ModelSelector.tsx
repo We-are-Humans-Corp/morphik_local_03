@@ -55,7 +55,9 @@ export function ModelSelector({
         if (mergedConfig.groq?.apiKey) providers.add("groq");
         if (mergedConfig.deepseek?.apiKey) providers.add("deepseek");
 
-        // Load custom models from new endpoint
+        // DISABLED: Custom models loading - models already come from /models endpoint
+        // This was causing duplicates
+        /*
         try {
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/custom`, {
             headers: {
@@ -99,6 +101,7 @@ export function ModelSelector({
         } catch (err) {
           console.error("Failed to load custom models from backend:", err);
         }
+        */
       } catch (err) {
         console.error("Failed to load configurations:", err);
 
@@ -151,8 +154,6 @@ export function ModelSelector({
         providers.add("openai");
       }
 
-      // Always add configured provider since it uses server-side keys
-      providers.add("configured");
 
       console.log("Final available providers:", Array.from(providers));
       setAvailableProviders(providers);
@@ -175,7 +176,7 @@ export function ModelSelector({
   useEffect(() => {
     if (!currentModel && models.length > 0 && availableProviders.size > 0) {
       const firstAvailable = models.find(
-        (m: Model) => availableProviders.has(m.provider) || m.provider === "configured"
+        (m: Model) => isModelAvailable(m)
       );
       if (firstAvailable) {
         const modelId = firstAvailable.id;
@@ -199,25 +200,25 @@ export function ModelSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedModelData = models.find(m => m.id === currentModel);
-
-  // Special handling for default model
-  const displayName = currentModel === "default" ? "Morphik (default)" : selectedModelData?.name || "Select model";
+  // Define isModelAvailable function before it's used
   const isModelAvailable = (model: Model) => {
-    // Ollama модели всегда доступны (локальные)
+    console.log(`🔍 Checking model: ${model.id}, provider: ${model.provider}`);
+    
+    // Ollama модели всегда доступны
     if (model.id.startsWith("ollama_")) return true;
     
-    // Custom модели пользователя всегда доступны  
+    // Custom модели всегда доступны  
     if (model.id.startsWith("custom_")) return true;
     
-    // Проверяем наличие ключей для провайдеров по префиксу ID
-    if (model.id.startsWith("claude_") && availableProviders.has("anthropic")) return true;
-    if (model.id.startsWith("openai_") && availableProviders.has("openai")) return true;
-    if (model.id.startsWith("azure_") && availableProviders.has("azure")) return true;
-    if (model.id.startsWith("gemini_") && availableProviders.has("google")) return true;
-    if (model.id.startsWith("groq_") && availableProviders.has("groq")) return true;
-    if (model.id.startsWith("deepseek_") && availableProviders.has("deepseek")) return true;
+    // Проверяем по provider И по ID префиксу - ИСПРАВЛЕНЫ СКОБКИ!
+    if ((model.id.startsWith("claude_") || (model.provider === "custom" && model.id.includes("claude"))) && availableProviders.has("anthropic")) return true;
+    if ((model.id.startsWith("openai_") || model.provider === "openai") && availableProviders.has("openai")) return true;
+    if ((model.id.startsWith("azure_") || (model.provider === "openai" && model.id.includes("azure"))) && availableProviders.has("azure")) return true;
+    if ((model.id.startsWith("gemini_") || model.provider === "google") && availableProviders.has("google")) return true;
+    if ((model.id.startsWith("groq_") || model.provider === "groq") && availableProviders.has("groq")) return true;
+    if ((model.id.startsWith("deepseek_") || model.provider === "deepseek") && availableProviders.has("deepseek")) return true;
     
+    console.log(`❌ Model ${model.id} not available - no provider key`);
     return false;
   };
 
@@ -240,6 +241,9 @@ export function ModelSelector({
     together: "🤝",
     azure: "☁️",
   };
+
+  const selectedModelData = models.find(m => m.id === currentModel);
+  const displayName = currentModel === "default" ? "Morphik (default)" : selectedModelData?.name || "Select model";
 
   return (
     <div className="relative" ref={dropdownRef}>

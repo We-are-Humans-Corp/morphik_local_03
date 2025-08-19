@@ -31,7 +31,7 @@ docker exec -it ollama ollama pull nomic-embed-text
 - **Frontend**: http://localhost:3000
 - **API Docs**: http://localhost:8000/docs
 - **Default Login**: 
-  - Username: `testuser`
+  - Username: `test@example.com` or `fedor@example.com`
   - Password: `testpassword123`
 
 ## Features

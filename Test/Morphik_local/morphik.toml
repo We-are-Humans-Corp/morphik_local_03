@@ -12,20 +12,20 @@ dev_permissions = ["read", "write", "admin"]  # Default dev permissions
 
 #### Registered models
 [registered_models]
-# OpenAI models
-openai_gpt4-1 = { model_name = "gpt-4.1" }
-openai_gpt4-1-mini = { model_name = "gpt-4.1-mini" }
+# OpenAI models - DISABLED (no API key)
+# openai_gpt4-1 = { model_name = "gpt-4.1" }
+# openai_gpt4-1-mini = { model_name = "gpt-4.1-mini" }
 
-# Azure OpenAI models
-azure_gpt4 = { model_name = "gpt-4", api_base = "YOUR_AZURE_URL_HERE", api_version = "2023-05-15", deployment_id = "gpt-4-deployment" }
-azure_gpt35 = { model_name = "gpt-3.5-turbo", api_base = "YOUR_AZURE_URL_HERE", api_version = "2023-05-15", deployment_id = "gpt-35-turbo-deployment" }
+# Azure OpenAI models - DISABLED (no API key)
+# azure_gpt4 = { model_name = "gpt-4", api_base = "YOUR_AZURE_URL_HERE", api_version = "2023-05-15", deployment_id = "gpt-4-deployment" }
+# azure_gpt35 = { model_name = "gpt-3.5-turbo", api_base = "YOUR_AZURE_URL_HERE", api_version = "2023-05-15", deployment_id = "gpt-35-turbo-deployment" }
 
 # Anthropic models
 claude_opus = { model_name = "anthropic/claude-3-opus-20240229" }
 claude_sonnet = { model_name = "anthropic/claude-3-5-sonnet-latest" }
 
-# Google Gemini models
-gemini_flash = { model_name = "gemini/gemini-2.5-flash-preview-05-20" } # gemini-2.5-flash-preview-05-20
+# Google Gemini models - DISABLED (no API key)
+# gemini_flash = { model_name = "gemini/gemini-2.5-flash-preview-05-20" } # gemini-2.5-flash-preview-05-20
 # gemini_flash = { model_name = "gemini/gemini-2.5-pro-preview-06-05" } # { model_name = "claude-4-sonnet-20250514"} # { model_name = "gpt-4.1" } # { model_name = "gemini/gemini-2.5-pro-preview-06-05" } # {model_name = "o3-2025-04-16"} #  { model_name = "claude-3-7-sonnet-latest"} #  { model_name = "gemini/gemini-2.5-flash-preview-05-20" } # gemini-2.5-flash-preview-05-20
 # gemini_flash = { model_name = "groq/meta-llama/llama-4-maverick-17b-128e-instruct"}
 
@@ -37,9 +37,10 @@ gemini_flash = { model_name = "gemini/gemini-2.5-flash-preview-05-20" } # gemini
 ollama_llama = { model_name = "ollama/llama3.2:3b", api_base = "http://135.181.106.12:11434" }
 ollama_embedding = { model_name = "ollama/nomic-embed-text", api_base = "http://135.181.106.12:11434" }
 
-openai_embedding = { model_name = "text-embedding-3-small" }
-openai_embedding_large = { model_name = "text-embedding-3-large" }
-azure_embedding = { model_name = "text-embedding-ada-002", api_base = "YOUR_AZURE_URL_HERE", api_version = "2023-05-15", deployment_id = "embedding-ada-002" }
+# OpenAI embeddings - DISABLED (no API key)
+# openai_embedding = { model_name = "text-embedding-3-small" }
+# openai_embedding_large = { model_name = "text-embedding-3-large" }
+# azure_embedding = { model_name = "text-embedding-ada-002", api_base = "YOUR_AZURE_URL_HERE", api_version = "2023-05-15", deployment_id = "embedding-ada-002" }
 
 
 #### Component configurations ####
@@ -48,7 +49,7 @@ azure_embedding = { model_name = "text-embedding-ada-002", api_base = "YOUR_AZUR
 model = "ollama_llama" # Model for the agent logic
 
 [completion]
-model = "claude_sonnet" # Используем Claude для быстрых ответов
+model = "ollama_llama" # Используем Ollama вместо Claude (нет API ключа)
 default_max_tokens = "1000"
 default_temperature = 0.3
 
