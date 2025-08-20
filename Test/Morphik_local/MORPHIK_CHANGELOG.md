@@ -1,5 +1,30 @@
 # Morphik Changelog
 
+## [0.4.7] - 2025-08-20
+
+### Added
+- Force update UI script (force_update_ui.sh) for complete UI refresh
+- Morphik UI diagnostic script (morphik_ui_diagnostic.sh) for system health checks
+- New modern chat interface with sidebar chat history
+- Improved UI layout with "Let's dive into your knowledge" welcome message
+
+### Fixed
+- Removed duplicate UI installation in /Morphik_local/Morphik_local directory
+- Resolved UI version conflicts between 0.4.1 and 0.4.7
+- Fixed Docker cache issues preventing UI updates
+- Corrected UI routing to use new version consistently
+
+### Changed
+- UI updated from version 0.4.1 to 0.4.7
+- Migrated to single UI location in Test/Morphik_local
+- Improved Docker build process with proper cache management
+- Enhanced chat interface with better user experience
+
+### Infrastructure
+- Cleaned up 18.39GB of Docker cache
+- Optimized container build process
+- Removed redundant UI components
+
 ## [Current] - 2025-07-30
 
 ### Fixed
