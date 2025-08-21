@@ -2087,8 +2087,6 @@ class PostgresDatabase(BaseDatabase):
             await self.initialize()
 
         try:
-            now = datetime.now(UTC).isoformat()
-
             # Auto-generate title from first user message if not provided
             if title is None and history:
                 # Find first user message
@@ -2116,14 +2114,14 @@ class PostgresDatabase(BaseDatabase):
                     text(
                         """
                         INSERT INTO chat_conversations (conversation_id, user_id, app_id, history, title, created_at, updated_at)
-                        VALUES (:cid, :uid, :aid, :hist, :title, CAST(:now AS TEXT), CAST(:now AS TEXT))
+                        VALUES (:cid, :uid, :aid, :hist, :title, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                         ON CONFLICT (conversation_id)
                         DO UPDATE SET
                             user_id = EXCLUDED.user_id,
                             app_id = EXCLUDED.app_id,
                             history = EXCLUDED.history,
                             title = COALESCE(EXCLUDED.title, chat_conversations.title),
-                            updated_at = CAST(:now AS TEXT)
+                            updated_at = CURRENT_TIMESTAMP
                         """
                     ),
                     {
@@ -2132,7 +2130,6 @@ class PostgresDatabase(BaseDatabase):
                         "aid": app_id,
                         "hist": json.dumps(history),
                         "title": title,
-                        "now": now,
                     },
                 )
                 await session.commit()
