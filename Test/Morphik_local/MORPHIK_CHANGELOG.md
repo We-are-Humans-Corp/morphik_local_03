@@ -1,5 +1,16 @@
 # Morphik Changelog
 
+## [0.4.8] - 2025-08-21
+
+### Fixed
+- Critical fix for chat history persistence in PostgreSQL
+- Resolved timestamp type casting error preventing chats from being saved
+- Fixed `upsert_chat_history` method to use `CURRENT_TIMESTAMP` instead of text casting
+
+### Changed
+- Database layer now correctly handles timestamp fields for chat history
+- Chat sessions properly persist across user sessions
+
 ## [0.4.7] - 2025-08-20
 
 ### Added
@@ -7,6 +18,7 @@
 - Morphik UI diagnostic script (morphik_ui_diagnostic.sh) for system health checks
 - New modern chat interface with sidebar chat history
 - Improved UI layout with "Let's dive into your knowledge" welcome message
+- Chat history functionality imported from upstream Morphik repository
 
 ### Fixed
 - Removed duplicate UI installation in /Morphik_local/Morphik_local directory
