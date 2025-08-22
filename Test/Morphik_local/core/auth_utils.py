@@ -27,12 +27,13 @@ async def verify_token(authorization: str = Header(None)) -> AuthContext:  # noq
     # 1. Development shortcut – trust everyone when *dev_mode* is active.
     # ------------------------------------------------------------------
     if settings.dev_mode:
+        # Use the single demo user from database (ID=8)
         return AuthContext(
             entity_type=EntityType(settings.dev_entity_type),
-            entity_id=settings.dev_entity_id,
+            entity_id="8",  # Real user ID from database
             permissions=set(settings.dev_permissions),
-            user_id=settings.dev_entity_id,  # In dev mode, entity_id == user_id
-            app_id="dev_app_id",  # Add app_id for dev mode
+            user_id="8",  # Real user ID from database
+            app_id="morphik_app",  # Consistent app_id
         )
 
     # ------------------------------------------------------------------

@@ -12,27 +12,28 @@ This is a local installation of Morphik, an AI-native toolset for visually rich 
 ### Installation
 ```bash
 # 1. Clone the repository
-git clone https://github.com/We-are-Humans-Corp/Morphik_local.git
-cd Morphik_local
+git clone https://github.com/We-are-Humans-Corp/morphik_local_03.git
+cd morphik_local_03/Test/Morphik_local
 
 # 2. Set up environment
 cp .env.example .env
 # Edit .env with your configuration
 
 # 3. Start all services
-docker compose --profile ollama up -d
+docker-compose -f docker-compose.local.yml up -d
 
-# 4. Load required models
-docker exec -it ollama ollama pull llama3.2:3b
-docker exec -it ollama ollama pull nomic-embed-text
+# 4. Start authentication service
+cd auth-service && ./start.sh
 ```
 
 ### Access
+- **Authentication**: http://localhost:8080/login.html
 - **Frontend**: http://localhost:3000
 - **API Docs**: http://localhost:8000/docs
 - **Default Login**: 
-  - Username: `test@example.com` or `fedor@example.com`
-  - Password: `testpassword123`
+  - Username: `demotest`
+  - Password: `demo`
+  - Email: `demotest@test.com`
 
 ## Features
 
@@ -54,11 +55,12 @@ docker exec -it ollama ollama pull nomic-embed-text
 
 | Service | Port | Description |
 |---------|------|-------------|
+| Auth Service | 8080 | Standalone authentication service |
 | UI | 3000 | Next.js frontend application |
 | API | 8000 | FastAPI backend server |
-| PostgreSQL | 5432 | Database with pgvector extension |
-| Redis | 6379 | Queue and cache |
-| Ollama | 11434 | Local LLM inference |
+| PostgreSQL | 5432 | Database with pgvector extension (Remote: 135.181.106.12) |
+| Redis | 6379 | Queue and cache (Remote: 135.181.106.12) |
+| Ollama | 11434 | Local LLM inference (Remote: 135.181.106.12) |
 | Worker | - | Background job processor |
 
 ## Configuration
@@ -126,9 +128,22 @@ docker compose logs postgres
 docker compose restart postgres
 ```
 
+## Latest Updates (v0.4.10)
+
+### 🔐 Unified User System
+- Single user authentication across all services
+- API keys properly linked to real users
+- Chat history correctly saved and persisted
+- Optimized performance and reduced latency
+
+### 🚀 Quick Start After Update
+1. Ensure auth-service is running: `cd auth-service && python3 server.py`
+2. Login with credentials: username `demotest`, password `demo`
+3. All your chats and API keys will be automatically linked
+
 ## Support
 
-- GitHub Issues: [Report bugs](https://github.com/We-are-Humans-Corp/Morphik_local/issues)
+- GitHub Issues: [Report bugs](https://github.com/We-are-Humans-Corp/morphik_local_03/issues)
 - Discord: [Join community](https://discord.gg/morphik)
 - Documentation: [Official docs](https://morphik.ai/docs)
 
