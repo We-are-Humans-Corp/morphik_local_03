@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { showAlert } from "@/components/ui/alert-system";
 import { MultiSelect } from "@/components/ui/multi-select";
 import DeleteConfirmationModal from "@/components/documents/DeleteConfirmationModal";
-import { useHeader } from "@/contexts/header-context";
+// import { useHeader } from "@/contexts/header-context"; // Removed - MorphikUI handles breadcrumbs
 
 // Dynamically import ForceGraphComponent to avoid SSR issues
 const ForceGraphComponent = dynamic(() => import("@/components/ForceGraphComponent"), {
@@ -50,6 +50,8 @@ interface Graph {
     status?: string;
     workflow_id?: string;
     run_id?: string;
+    node_count?: number;
+    edge_count?: number;
     [key: string]: unknown;
   };
 }
@@ -198,25 +200,26 @@ const GraphSection: React.FC<GraphSectionProps> = ({
   const graphContainerRef = useRef<HTMLDivElement>(null);
   // Removed graphInstance ref as it's not needed with the dynamic component
 
+  // Removed - MorphikUI handles breadcrumbs centrally
   // Header controls
-  const { setCustomBreadcrumbs, setRightContent } = useHeader();
+  // const { setCustomBreadcrumbs, setRightContent } = useHeader();
 
-  // set breadcrumbs & button when component mounts
-  useEffect(() => {
-    setCustomBreadcrumbs([{ label: "Home", href: "/" }, { label: "Knowledge Graphs" }]);
+  // // set breadcrumbs & button when component mounts
+  // useEffect(() => {
+  //   setCustomBreadcrumbs([{ label: "Home", href: "/" }, { label: "Knowledge Graphs" }]);
 
-    const right = (
-      <Button variant="default" size="sm" onClick={() => setShowCreateDialog(true)}>
-        <Plus className="mr-2 h-4 w-4" /> New Graph
-      </Button>
-    );
-    setRightContent(right);
+  //   const right = (
+  //     <Button variant="default" size="sm" onClick={() => setShowCreateDialog(true)}>
+  //       <Plus className="mr-2 h-4 w-4" /> New Graph
+  //     </Button>
+  //   );
+  //   setRightContent(right);
 
-    return () => {
-      setCustomBreadcrumbs(null);
-      setRightContent(null);
-    };
-  }, [setCustomBreadcrumbs, setRightContent, setShowCreateDialog]);
+  //   return () => {
+  //     setCustomBreadcrumbs(null);
+  //     setRightContent(null);
+  //   };
+  // }, [setCustomBreadcrumbs, setRightContent, setShowCreateDialog]);
 
   // Fallback function for local graph data (when API fails or for local graphs)
   const prepareLocalGraphData = useCallback((graph: Graph | null) => {
@@ -333,7 +336,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
     try {
       setLoading(true);
       const headers = createHeaders();
-      const response = await fetch(`${apiBaseUrl}/graphs`, { headers });
+      const response = await fetch(`${apiBaseUrl}/graph`, { headers });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch graphs: ${response.statusText}`);
@@ -502,8 +505,12 @@ const GraphSection: React.FC<GraphSectionProps> = ({
   // );
 
   // Handle graph click
-  const handleGraphClick = (graph: Graph) => {
-    fetchGraph(graph.name);
+  const handleGraphClick = async (graph: Graph) => {
+    const fetchedGraph = await fetchGraph(graph.name);
+    if (fetchedGraph && fetchedGraph.system_metadata?.status !== "processing") {
+      // Automatically show visualization for completed graphs
+      setShowVisualization(true);
+    }
   };
 
   // Create a new graph
@@ -1064,7 +1071,21 @@ const GraphSection: React.FC<GraphSectionProps> = ({
                   Update Graph
                 </Button>
                 <Button
-                  onClick={() => setShowVisualization(true)}
+                  onClick={() => {
+                    const nodeCount = (selectedGraph.system_metadata?.node_count as number) || 0;
+                    if (nodeCount > 0) {
+                      setShowVisualization(true);
+                    } else {
+                      showAlert("Graph is still preparing. Try again shortly.", {
+                        type: "info",
+                        title:
+                          typeof selectedGraph.system_metadata?.pipeline_stage === "string"
+                            ? (selectedGraph.system_metadata?.pipeline_stage as string)
+                            : "Preparing graph",
+                        duration: 4000,
+                      });
+                    }
+                  }}
                   className="flex items-center"
                   disabled={selectedGraph.system_metadata?.status === "processing"}
                 >

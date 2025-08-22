@@ -21,15 +21,23 @@ export interface QueryOptions extends SearchOptions {
   folder_name?: string | string[]; // Support single folder or array of folders
   // external_id removed - should be in filters object as external_id: string[]
   llm_config?: Record<string, unknown>; // LiteLLM-compatible model configuration
+  inline_citations?: boolean; // Whether to include inline citations with filename and page number
 }
 
 // Common types used across multiple components
+
+// Breadcrumb type for custom navigation
+export interface Breadcrumb {
+  label: string;
+  href?: string;
+  onClick?: (e: React.MouseEvent) => void;
+  current?: boolean;
+}
 
 export interface MorphikUIProps {
   connectionUri?: string | null; // Allow null/undefined initially
   apiBaseUrl?: string;
   isReadOnlyUri?: boolean; // Controls whether the URI can be edited
-  onUriChange?: (newUri: string) => void; // Callback when URI is changed
   onBackClick?: () => void; // Callback when back button is clicked
   appName?: string; // Name of the app to display in UI
   initialFolder?: string | null; // Initial folder to show
@@ -43,6 +51,9 @@ export interface MorphikUIProps {
     | "pdf"
     | "settings"
     | "logs"; // Initial section to show
+
+  // Custom breadcrumbs for organization context
+  breadcrumbItems?: Breadcrumb[];
 
   // Callbacks for Documents Section tracking
   onDocumentUpload?: (fileName: string, fileSize: number) => void;
@@ -73,6 +84,7 @@ export interface MorphikUIProps {
   };
   onLogout?: () => void;
   onProfileNavigate?: (section: "account" | "billing" | "notifications") => void;
+  onUpgradeClick?: () => void;
 
   // UI Customization
   logoLight?: string;
@@ -181,4 +193,12 @@ export interface CustomModelCreate {
   provider: string;
   model_name: string;
   config: Record<string, unknown>;
+}
+
+// Progress tracking interface for document processing
+export interface ProcessingProgress {
+  step_name: string;
+  current_step: number;
+  total_steps: number;
+  percentage?: number;
 }

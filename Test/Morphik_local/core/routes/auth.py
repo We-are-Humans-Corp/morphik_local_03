@@ -47,20 +47,19 @@ async def get_user_by_username(username: str) -> Optional[UserInDB]:
 async def create_user(user: UserCreate) -> UserInDB:
     """Create new user in database."""
     try:
-        user_id = str(uuid.uuid4())
         password_hash = UserInDB.hash_password(user.password)
         
         async with document_service.db.engine.begin() as conn:
+            # Don't specify id - let PostgreSQL auto-generate it with SERIAL
             query = text("""
-                INSERT INTO users (id, username, password_hash, email)
-                VALUES (:id, :username, :password_hash, :email)
+                INSERT INTO users (username, password_hash, email)
+                VALUES (:username, :password_hash, :email)
                 RETURNING id, username, password_hash, email, created_at
             """)
             
             result = await conn.execute(
                 query,
                 {
-                    "id": user_id,
                     "username": user.username,
                     "password_hash": password_hash,
                     "email": user.email

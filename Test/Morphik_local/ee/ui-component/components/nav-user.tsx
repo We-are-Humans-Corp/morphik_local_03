@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { IconCreditCard, IconLogout, IconUserCircle, IconChevronUp, IconChevronDown, IconSparkles } from "@tabler/icons-react";
+import { IconCreditCard, IconLogout, IconUserCircle, IconChevronUp, IconChevronDown } from "@tabler/icons-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar-new";
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar-components";
 import { cn } from "@/lib/utils";
 
 interface NavUserProps {
@@ -28,7 +28,7 @@ export function NavUser({ user, onLogout, onProfileNavigate }: NavUserProps) {
           onClick={() => setIsOpen(!isOpen)}
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >
-          <Avatar className="h-8 w-8 rounded-lg grayscale">
+          <Avatar className="h-6 w-6 rounded-lg grayscale">
             <AvatarImage src={user.avatar} alt={user.name} />
             <AvatarFallback className="rounded-lg">M</AvatarFallback>
           </Avatar>
@@ -36,23 +36,12 @@ export function NavUser({ user, onLogout, onProfileNavigate }: NavUserProps) {
             <span className="truncate font-medium">{user.name}</span>
             <span className="truncate text-xs text-muted-foreground">{user.email}</span>
           </div>
-          {isOpen ? <IconChevronUp className="ml-auto size-4" /> : <IconChevronDown className="ml-auto size-4" />}
+          {isOpen ? <IconChevronUp className="ml-auto h-4 w-4" /> : <IconChevronDown className="ml-auto h-4 w-4" />}
         </SidebarMenuButton>
       </SidebarMenuItem>
 
       {/* Expandable menu items */}
-      <div className={cn("overflow-hidden transition-all duration-200", isOpen ? "max-h-64" : "max-h-0")}>
-        {/* Upgrade Button for Free Users */}
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
-            onClick={() => window.open("https://morphik.ai/pricing", "_blank")}
-          >
-            <IconSparkles />
-            <span>Upgrade to Pro</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        
+      <div className={cn("overflow-hidden transition-all duration-200", isOpen ? "max-h-48" : "max-h-0")}>
         <SidebarMenuItem>
           <SidebarMenuButton
             onClick={e => {
@@ -64,7 +53,7 @@ export function NavUser({ user, onLogout, onProfileNavigate }: NavUserProps) {
               }
             }}
           >
-            <IconUserCircle />
+            <IconUserCircle className="h-5 w-5" />
             <span>Account</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -80,7 +69,7 @@ export function NavUser({ user, onLogout, onProfileNavigate }: NavUserProps) {
               }
             }}
           >
-            <IconCreditCard />
+            <IconCreditCard className="h-5 w-5" />
             <span>Billing</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -96,7 +85,7 @@ export function NavUser({ user, onLogout, onProfileNavigate }: NavUserProps) {
               }
             }}
           >
-            <IconLogout />
+            <IconLogout className="h-5 w-5" />
             <span>Log out</span>
           </SidebarMenuButton>
         </SidebarMenuItem>

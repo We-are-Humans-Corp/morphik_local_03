@@ -1,9 +1,10 @@
 "use client";
 
 import { ConnectorCard } from "./ConnectorCard";
-import { BookLock, BookOpen } from "lucide-react"; // Example icon for Google Drive and Zotero
-import { useHeader } from "@/contexts/header-context";
-import { useEffect } from "react";
+import { BookLock, BookOpen } from "lucide-react";
+import { GitHub } from "../chat/icons"; // Import our custom GitHub icon
+// import { useHeader } from "@/contexts/header-context"; // Removed - MorphikUI handles breadcrumbs
+// import { useEffect } from "react"; // Removed - not needed
 
 // In the future, this could come from a configuration or an API call
 const availableConnectors = [
@@ -12,6 +13,12 @@ const availableConnectors = [
     displayName: "Google Drive",
     icon: BookLock, // Using an appropriate icon from lucide-react
     description: "Access files and folders from your Google Drive.",
+  },
+  {
+    connectorType: "github",
+    displayName: "GitHub",
+    icon: GitHub,
+    description: "Access repositories and files from GitHub.",
   },
   {
     connectorType: "zotero",
@@ -34,12 +41,13 @@ interface ConnectorListProps {
 }
 
 export function ConnectorList({ apiBaseUrl, authToken }: ConnectorListProps) {
-  const { setCustomBreadcrumbs } = useHeader();
+  // const { setCustomBreadcrumbs } = useHeader();
 
-  useEffect(() => {
-    setCustomBreadcrumbs([{ label: "Home", href: "/" }, { label: "Connectors" }]);
-    return () => setCustomBreadcrumbs(null);
-  }, [setCustomBreadcrumbs]);
+  // Removed - MorphikUI handles breadcrumbs centrally
+  // useEffect(() => {
+  //   setCustomBreadcrumbs([{ label: "Home", href: "/" }, { label: "Connectors" }]);
+  //   return () => setCustomBreadcrumbs(null);
+  // }, [setCustomBreadcrumbs]);
 
   if (availableConnectors.length === 0) {
     return (

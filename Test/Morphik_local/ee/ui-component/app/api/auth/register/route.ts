@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     // Forward the request to the backend
-    const backendUrl = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     const response = await fetch(`${backendUrl}/auth/register`, {
       method: 'POST',
       headers: {

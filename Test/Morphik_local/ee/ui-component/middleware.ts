@@ -1,29 +1,33 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Routes that don't require authentication
-const publicRoutes = ['/login', '/register', '/api/auth/login', '/api/auth/register']
-
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const path = request.nextUrl.pathname
   
-  // Check if the route is public
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
+  // API paths that should always be accessible
+  const apiPaths = ['/api/']
   
-  // Get the auth token from cookies or authorization header
-  const authToken = request.cookies.get('authToken')?.value || 
-                   request.headers.get('authorization')?.replace('Bearer ', '')
+  // Check if this is an API path
+  const isApiPath = apiPaths.some(p => path.startsWith(p))
   
-  // If trying to access protected route without auth, redirect to login
-  if (!isPublicRoute && !authToken) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('from', pathname)
-    return NextResponse.redirect(loginUrl)
+  // Get the token from cookies
+  const token = request.cookies.get('authToken')?.value
+  
+  // Allow API requests to pass through
+  if (isApiPath) {
+    return NextResponse.next()
   }
   
-  // If authenticated and trying to access auth pages, redirect to home
-  if (authToken && (pathname === '/login' || pathname === '/register')) {
-    return NextResponse.redirect(new URL('/', request.url))
+  // Redirect to external auth service if no token
+  if (!token && path !== '/login' && path !== '/register') {
+    // Redirect to external auth service
+    return NextResponse.redirect('http://localhost:8080/login.html')
+  }
+  
+  // If user tries to access /login or /register, redirect to external auth
+  if (path === '/login' || path === '/register') {
+    const authPath = path === '/login' ? 'login.html' : 'register.html'
+    return NextResponse.redirect(`http://localhost:8080/${authPath}`)
   }
   
   return NextResponse.next()
@@ -36,8 +40,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public files
+     * - public folder
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public).*)',
   ],
 }

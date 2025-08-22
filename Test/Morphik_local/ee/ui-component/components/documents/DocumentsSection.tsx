@@ -112,9 +112,6 @@ interface DocumentsSectionProps {
   onFoldersUpdate?: (folders: Array<{ id: string; name: string }>) => void;
 }
 
-// Debug render counter
-let renderCount = 0;
-
 // Helper to generate temporary IDs for optimistic updates
 const generateTempId = () => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -149,18 +146,8 @@ const DocumentsSection = React.forwardRef<
     },
     ref
   ) => {
-    // Increment render counter for debugging
-    renderCount++;
-    console.log(`DocumentsSection rendered: #${renderCount}`);
-    // Ensure apiBaseUrl is correctly formatted, especially for localhost
+    // Ensure apiBaseUrl is correctly formatted
     const effectiveApiUrl = React.useMemo(() => {
-      console.log("DocumentsSection: Input apiBaseUrl:", apiBaseUrl);
-      // Check if it's a localhost URL and ensure it has the right format
-      if (apiBaseUrl.includes("localhost") || apiBaseUrl.includes("127.0.0.1")) {
-        if (!apiBaseUrl.includes("http")) {
-          return `http://${apiBaseUrl}`;
-        }
-      }
       return apiBaseUrl;
     }, [apiBaseUrl]);
 
@@ -758,7 +745,12 @@ const DocumentsSection = React.forwardRef<
     }, [selectedDocuments.length, documents.length, selectedFolder, combinedRootItems]);
 
     // Handle file upload
-    const handleFileUpload = async (file: File | null) => {
+    const handleFileUpload = async (
+      file: File | null,
+      metadataParam?: string,
+      rulesParam?: string,
+      useColpaliParam?: boolean
+    ) => {
       if (!file) {
         showAlert("Please select a file to upload", {
           type: "error",
@@ -788,11 +780,11 @@ const DocumentsSection = React.forwardRef<
 
       addOptimisticDocument(optimisticDoc);
 
-      // Save file reference before we reset the form
+      // Use passed parameters or fall back to hook values
       const fileToUploadRef = file;
-      const metadataRef = metadata;
-      const rulesRef = rules;
-      const useColpaliRef = useColpali;
+      const metadataRef = metadataParam ?? metadata;
+      const rulesRef = rulesParam ?? rules;
+      const useColpaliRef = useColpaliParam ?? useColpali;
 
       // Reset form
       resetUploadDialog();
@@ -923,7 +915,17 @@ const DocumentsSection = React.forwardRef<
     };
 
     // Handle batch file upload
-    const handleBatchFileUpload = async (files: File[], fromDragAndDrop: boolean = false) => {
+    const handleBatchFileUpload = async (
+      files: File[],
+      metadataParamOrFromDragAndDrop?: string | boolean,
+      rulesParam?: string,
+      useColpaliParam?: boolean
+    ) => {
+      // Handle overloaded parameters - check if second param is boolean (old signature) or string (new signature)
+      const fromDragAndDrop =
+        typeof metadataParamOrFromDragAndDrop === "boolean" ? metadataParamOrFromDragAndDrop : false;
+      const metadataParam =
+        typeof metadataParamOrFromDragAndDrop === "string" ? metadataParamOrFromDragAndDrop : undefined;
       if (files.length === 0) {
         showAlert("Please select files to upload", {
           type: "error",
@@ -958,11 +960,11 @@ const DocumentsSection = React.forwardRef<
         addOptimisticDocument(optimisticDoc);
       });
 
-      // Save form data locally
+      // Save form data locally - use passed parameters or fall back to hook values
       const batchFilesRef = [...files];
-      const metadataRef = metadata;
-      const rulesRef = rules;
-      const useColpaliRef = useColpali;
+      const metadataRef = metadataParam ?? metadata;
+      const rulesRef = rulesParam ?? rules;
+      const useColpaliRef = useColpaliParam ?? useColpali;
 
       // Only reset form if not from drag and drop
       if (!fromDragAndDrop) {

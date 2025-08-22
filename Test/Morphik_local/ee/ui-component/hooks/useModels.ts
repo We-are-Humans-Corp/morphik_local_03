@@ -39,34 +39,26 @@ export function useModels(apiBaseUrl: string, authToken: string | null) {
       const cacheKey = apiBaseUrl;
       const cached = modelsCache.get(cacheKey);
 
-      // DISABLED CACHE - always fetch fresh data
-      // if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      //   setModels(cached.models);
-      //   setLoading(false);
-      //   return cached.models;
-      // }
+      // Check if we have valid cached data
+      if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setModels(cached.models);
+        setLoading(false);
+        return cached.models;
+      }
 
       try {
         setLoading(true);
         setError(null);
 
-        console.log("🔄 Fetching models from:", `${apiBaseUrl}/models`);
-        console.log("🔐 Auth token present:", !!authToken);
-
-        console.log("🚀 Fetching from URL:", `${apiBaseUrl}/models`);
-        console.log("🔑 Using auth token:", authToken);
-        
         const response = await fetch(`${apiBaseUrl}/models`, {
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
         });
 
         if (!response.ok) {
-          console.error("❌ API error:", response.status, response.statusText);
           throw new Error(`Failed to fetch models: ${response.statusText}`);
         }
 
         const data: ModelAPIResponse = await response.json();
-        console.log("📦 API response:", data);
         let transformedModels: Model[] = [];
 
         // Handle different response formats
@@ -76,7 +68,7 @@ export function useModels(apiBaseUrl: string, authToken: string | null) {
         } else if (data.chat_models) {
           // Transform chat_models format
           transformedModels = data.chat_models.map(model => ({
-            id: model.id,
+            id: model.config.model_name || model.model,
             name: model.id.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase()),
             provider: model.provider,
             description: `Model: ${model.model}`,
@@ -89,7 +81,6 @@ export function useModels(apiBaseUrl: string, authToken: string | null) {
           timestamp: Date.now(),
         });
 
-        console.log("✅ Models loaded:", transformedModels.length, "models");
         setModels(transformedModels);
         return transformedModels;
       } catch (err) {

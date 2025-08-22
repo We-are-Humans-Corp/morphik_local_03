@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { showAlert } from "@/components/ui/alert-system";
 
-import { Document, Folder, FolderSummary } from "@/components/types";
+import { Document, Folder, FolderSummary, ProcessingProgress } from "@/components/types";
 import { EmptyDocuments, NoMatchingDocuments, LoadingDocuments } from "./shared/EmptyStates";
 
 type ColumnType = "string" | "int" | "float" | "bool" | "Date" | "json";
@@ -579,7 +579,9 @@ const DocumentList: React.FC<DocumentListProps> = React.memo(function DocumentLi
                           ? "Failed"
                           : doc.system_metadata?.status === "uploading"
                             ? "Uploading"
-                            : "Processing"}
+                            : doc.system_metadata?.status === "processing" && doc.system_metadata?.progress
+                              ? `${(doc.system_metadata.progress as ProcessingProgress).step_name} (${(doc.system_metadata.progress as ProcessingProgress).current_step}/${(doc.system_metadata.progress as ProcessingProgress).total_steps})`
+                              : "Processing"}
                     </div>
                   </div>
                 ) : (
@@ -596,6 +598,18 @@ const DocumentList: React.FC<DocumentListProps> = React.memo(function DocumentLi
                 </div>
 
                 <span className="truncate font-medium">{doc.filename || "N/A"}</span>
+                {/* Progress bar for processing documents */}
+                {doc.system_metadata?.status === "processing" &&
+                  (doc.system_metadata?.progress as ProcessingProgress | undefined) && (
+                    <div className="mt-1 w-full">
+                      <div className="h-1 w-full overflow-hidden rounded-full bg-gray-200">
+                        <div
+                          className="h-full bg-blue-500 transition-all duration-300 ease-out"
+                          style={{ width: `${(doc.system_metadata.progress as ProcessingProgress).percentage || 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
               </div>
               <div className="px-3 py-2">
                 <button

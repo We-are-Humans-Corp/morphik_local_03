@@ -1,5 +1,64 @@
 # Morphik Changelog
 
+## [0.4.9] - 2025-08-22
+
+### Major Update - UI Migration & Authentication System
+
+### Added
+- **Standalone Authentication Service**
+  - Created separate auth-service on port 8080 with simple HTML pages
+  - Implemented clean registration and login pages without framework dependencies
+  - Added redirect mechanism for token transfer between domains
+  - Python HTTP server for serving auth pages
+
+- **Cross-Domain Authentication**
+  - Implemented `/api/auth/callback` endpoint for secure token transfer
+  - Added localStorage synchronization between ports 8080 and 3000
+  - Cookie-based session management with 24-hour expiration
+
+- **User Experience Improvements**
+  - Removed duplicate user profile from header (kept only sidebar profile)
+  - Fixed username display to show actual logged-in user instead of defaults
+  - Added debug page for authentication troubleshooting
+
+### Changed
+- **UI Updated to Official Morphik v0.4.7**
+  - Successfully migrated from v0.4.2 to official v0.4.7
+  - Preserved all custom configurations from morphik.toml
+  - Maintained connection to remote PostgreSQL (135.181.106.12)
+  
+- **Authentication Flow**
+  - Moved from integrated React auth to standalone HTML service
+  - Simplified login/logout process with clear redirects
+  - Removed built-in /login and /register pages from main UI
+
+### Fixed
+- **PostgreSQL Integration**
+  - Fixed Worker service compatibility with remote database
+  - Resolved UUID/Integer type mismatch in users table
+  - Corrected auth.py to work with PostgreSQL SERIAL auto-increment
+
+- **UI Context & State Management**
+  - Fixed userProfile loading from localStorage
+  - Corrected morphik-context.tsx to properly handle user data
+  - Resolved middleware redirects for unauthorized access
+
+### Technical Details
+- **Architecture**:
+  - Auth Service: `localhost:8080` (HTML/JS)
+  - UI Service: `localhost:3000` (Next.js)
+  - API Service: `localhost:8000` (FastAPI)
+  - Database: `135.181.106.12:5432` (PostgreSQL)
+
+- **Security**:
+  - JWT tokens with 7-day expiration
+  - SHA256 + salt password hashing
+  - Secure cross-domain token transfer
+  - httpOnly cookies for session management
+
+### Migration Guide
+See [UI Update Guide](./README/UI_UPDATE_GUIDE.md) for detailed instructions on updating UI while preserving authentication.
+
 ## [0.4.8] - 2025-08-21
 
 ### Fixed

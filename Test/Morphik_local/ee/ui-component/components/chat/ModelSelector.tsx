@@ -41,7 +41,7 @@ export function ModelSelector({
   useEffect(() => {
     const loadAvailableProviders = async () => {
       const providers = new Set<string>();
-      const api = new ModelConfigAPI(authToken);
+      const api = new ModelConfigAPI(authToken, apiBaseUrl);
       setLoadingCustomModels(true);
 
       try {
@@ -55,11 +55,9 @@ export function ModelSelector({
         if (mergedConfig.groq?.apiKey) providers.add("groq");
         if (mergedConfig.deepseek?.apiKey) providers.add("deepseek");
 
-        // DISABLED: Custom models loading - models already come from /models endpoint
-        // This was causing duplicates
-        /*
+        // Load custom models from new endpoint
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/custom`, {
+          const response = await fetch(`${apiBaseUrl}/models/custom`, {
             headers: {
               Authorization: `Bearer ${authToken}`,
             },
@@ -85,6 +83,9 @@ export function ModelSelector({
             customModelsList.forEach((model: { provider: string; config: { api_key?: string } }) => {
               // Check if the provider has an API key in the merged config
               // or if the model config contains an api_key
+              // or if the provider doesn't require an API key (like lemonade)
+              const providersWithoutApiKey = ["lemonade"];
+
               if (mergedConfig[model.provider]?.apiKey) {
                 providers.add(model.provider);
               } else if (
@@ -95,13 +96,15 @@ export function ModelSelector({
               ) {
                 // Model has its own API key
                 providers.add(model.provider);
+              } else if (providersWithoutApiKey.includes(model.provider)) {
+                // Provider doesn't require an API key
+                providers.add(model.provider);
               }
             });
           }
         } catch (err) {
           console.error("Failed to load custom models from backend:", err);
         }
-        */
       } catch (err) {
         console.error("Failed to load configurations:", err);
 
@@ -138,8 +141,14 @@ export function ModelSelector({
 
             // Add custom model providers to available providers
             const config = JSON.parse(localStorage.getItem("morphik_api_keys") || "{}");
+            const providersWithoutApiKey = ["lemonade"];
+
             parsedModels.forEach((model: { provider: string; config: { api_key?: string } }) => {
-              if (config[model.provider]?.apiKey || model.config.api_key) {
+              if (
+                config[model.provider]?.apiKey ||
+                model.config.api_key ||
+                providersWithoutApiKey.includes(model.provider)
+              ) {
                 providers.add(model.provider);
               }
             });
@@ -154,6 +163,8 @@ export function ModelSelector({
         providers.add("openai");
       }
 
+      // Always add configured provider since it uses server-side keys
+      providers.add("configured");
 
       console.log("Final available providers:", Array.from(providers));
       setAvailableProviders(providers);
@@ -176,7 +187,7 @@ export function ModelSelector({
   useEffect(() => {
     if (!currentModel && models.length > 0 && availableProviders.size > 0) {
       const firstAvailable = models.find(
-        (m: Model) => isModelAvailable(m)
+        (m: Model) => availableProviders.has(m.provider) || m.provider === "configured"
       );
       if (firstAvailable) {
         const modelId = firstAvailable.id;
@@ -200,26 +211,16 @@ export function ModelSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Define isModelAvailable function before it's used
+  const selectedModelData = models.find(m => m.id === currentModel);
+
+  // Special handling for default model
+  const displayName = currentModel === "default" ? "Morphik (default)" : selectedModelData?.name || "Select model";
   const isModelAvailable = (model: Model) => {
-    console.log(`🔍 Checking model: ${model.id}, provider: ${model.provider}`);
-    
-    // Ollama модели всегда доступны
-    if (model.id.startsWith("ollama_")) return true;
-    
-    // Custom модели всегда доступны  
-    if (model.id.startsWith("custom_")) return true;
-    
-    // Проверяем по provider И по ID префиксу - ИСПРАВЛЕНЫ СКОБКИ!
-    if ((model.id.startsWith("claude_") || (model.provider === "custom" && model.id.includes("claude"))) && availableProviders.has("anthropic")) return true;
-    if ((model.id.startsWith("openai_") || model.provider === "openai") && availableProviders.has("openai")) return true;
-    if ((model.id.startsWith("azure_") || (model.provider === "openai" && model.id.includes("azure"))) && availableProviders.has("azure")) return true;
-    if ((model.id.startsWith("gemini_") || model.provider === "google") && availableProviders.has("google")) return true;
-    if ((model.id.startsWith("groq_") || model.provider === "groq") && availableProviders.has("groq")) return true;
-    if ((model.id.startsWith("deepseek_") || model.provider === "deepseek") && availableProviders.has("deepseek")) return true;
-    
-    console.log(`❌ Model ${model.id} not available - no provider key`);
-    return false;
+    // Custom models are available if they have an API key in their config or in saved API keys
+    if (model.id.startsWith("custom_")) {
+      return availableProviders.has(model.provider);
+    }
+    return availableProviders.has(model.provider) || model.provider === "configured";
   };
 
   const handleModelSelect = (model: Model) => {
@@ -240,10 +241,8 @@ export function ModelSelector({
     ollama: "🦙",
     together: "🤝",
     azure: "☁️",
+    lemonade: "🍋",
   };
-
-  const selectedModelData = models.find(m => m.id === currentModel);
-  const displayName = currentModel === "default" ? "Morphik (default)" : selectedModelData?.name || "Select model";
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -281,33 +280,55 @@ export function ModelSelector({
               </div>
             </div>
 
-            {models
-              .filter(model => {
-                const available = isModelAvailable(model);
-                console.log(`Model ${model.id}: available=${available}, providers:`, Array.from(availableProviders));
-                return available;
-              })  // Only show available models
-              .map(model => {
-              const isAvailable = true; // We've already filtered, so all shown models are available
-              console.log(`Showing model ${model.name} (${model.id}): provider=${model.provider}`);
+            {models.map(model => {
+              const isAvailable = isModelAvailable(model);
+              console.log(`Model ${model.name} (${model.id}): provider=${model.provider}, available=${isAvailable}`);
 
               return (
                 <div
                   key={model.id}
                   className={cn(
                     "group relative flex items-start gap-2 rounded-md px-2 py-2 text-sm",
-                    "cursor-pointer hover:bg-accent",
+                    isAvailable ? "cursor-pointer hover:bg-accent" : "cursor-not-allowed opacity-50",
                     currentModel === model.id && "bg-accent"
                   )}
                   onClick={() => handleModelSelect(model)}
+                  onMouseEnter={e => {
+                    if (!isAvailable) {
+                      const tooltip = e.currentTarget.querySelector(".tooltip") as HTMLElement;
+                      if (tooltip) tooltip.style.display = "block";
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isAvailable) {
+                      const tooltip = e.currentTarget.querySelector(".tooltip") as HTMLElement;
+                      if (tooltip) tooltip.style.display = "none";
+                    }
+                  }}
                 >
                   <span className="text-base">{providerIcons[model.provider] || "●"}</span>
                   <div className="flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="font-medium">{model.name}</span>
+                      {!isAvailable && <Lock className="h-3 w-3" />}
                     </div>
                     {model.description && <div className="text-xs text-muted-foreground">{model.description}</div>}
                   </div>
+
+                  {/* Hover tooltip for locked models */}
+                  {!isAvailable && (
+                    <div
+                      className="tooltip absolute bottom-full left-1/2 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-popover-foreground px-2 py-1 text-xs text-popover"
+                      style={{ display: "none" }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onRequestApiKey?.(model.provider);
+                        setIsOpen(false);
+                      }}
+                    >
+                      Add API key →
+                    </div>
+                  )}
                 </div>
               );
             })}

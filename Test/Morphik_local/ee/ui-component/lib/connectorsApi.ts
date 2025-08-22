@@ -30,6 +30,15 @@ export interface OAuthAuthResponse {
 // Union type for auth responses
 export type AuthResponse = ManualAuthResponse | OAuthAuthResponse;
 
+// Interface for rule objects
+export interface Rule {
+  type: "metadata_extraction" | "natural_language";
+  stage: "post_parsing" | "post_chunking";
+  schema?: Record<string, unknown>; // for metadata_extraction rules
+  prompt?: string; // for natural_language rules
+  use_images?: boolean; // for metadata_extraction rules
+}
+
 // Fetches the authentication status for a given connector type
 export async function getConnectorAuthStatus(
   apiBaseUrl: string,
@@ -204,9 +213,8 @@ export async function listConnectorFiles(
 // Define the structure for ingestion options
 interface IngestionOptions {
   metadata?: Record<string, unknown>;
-  rules?: unknown[]; // Consider a more specific type for rules if available
-  morphikFolderName?: string | null;
-  morphikEndUserId?: string | null;
+  rules?: Rule[];
+  morphikFolderName?: string;
 }
 
 export async function ingestConnectorFile(
@@ -214,26 +222,20 @@ export async function ingestConnectorFile(
   connectorType: string,
   authToken: string | null,
   fileId: string,
-  // Replace displayName with ingestionOptions
-  options?: IngestionOptions
+  options: IngestionOptions = {}
 ): Promise<Record<string, unknown>> {
-  // Define a more specific return type based on your API response for ingestion
-  const body = {
-    file_id: fileId,
-    // Spread options to include metadata and rules if provided
-    // The backend IngestFromConnectorRequest will need to be updated to accept these
-    ...(options?.metadata && { metadata: options.metadata }),
-    ...(options?.rules && { rules: options.rules }),
-    morphik_folder_name: options?.morphikFolderName,
-    morphik_end_user_id: options?.morphikEndUserId,
-  };
   const response = await fetch(`${apiBaseUrl}/ee/connectors/${connectorType}/ingest`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      file_id: fileId,
+      ...(options.metadata && { metadata: options.metadata }),
+      ...(options.rules && { rules: options.rules }),
+      ...(options.morphikFolderName && { morphik_folder_name: options.morphikFolderName }),
+    }),
   });
 
   if (!response.ok) {
