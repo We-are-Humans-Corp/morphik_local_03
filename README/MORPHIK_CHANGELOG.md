@@ -1,113 +1,186 @@
 # Morphik Changelog
 
-## [Current] - 2025-08-19
+## [0.4.10] - 2025-08-22
 
-### UI Update to v0.4.2+ Standards
+### Критические улучшения системы аутентификации и управления пользователями
 
-### Changed
-- Updated Next.js dependencies to latest stable version 14.2.32
-- Optimized next.config.mjs with performance improvements
-- Added reactStrictMode and swcMinify for better production builds
-- Enhanced webpack configuration for better client-side optimization
+### Основные изменения
+
+#### 🔐 Унифицированная система пользователей
+- **Полная интеграция пользователей с API ключами**
+  - Устранена проблема дублирования пользователей в системе
+  - Создан единый пользователь (ID: 8, username: demotest) для всех операций
+  - API ключи теперь правильно привязаны к реальным пользователям в БД
+  - Исправлена проблема с dev_user, который переопределял реальных пользователей
+
+#### 🔑 Улучшена система управления API ключами
+- **Правильная привязка ключей к пользователям**
+  - API ключи Anthropic теперь корректно сохраняются с user_id из токена
+  - Устранена проблема, когда ключи сохранялись с dev_user вместо реального пользователя
+  - Добавлена проверка и валидация ключей при сохранении
+  - История чатов теперь корректно привязывается к пользователю с API ключом
+
+#### 💾 Исправлена работа с историей чатов
+- **Полная функциональность сохранения чатов**
+  - Чаты корректно сохраняются в PostgreSQL с привязкой к user_id
+  - Исправлена проблема с типами данных timestamp (CURRENT_TIMESTAMP)
+  - История чатов доступна после перезагрузки страницы
+  - Автоматическая генерация заголовков для чатов из первого сообщения
+
+#### 🚀 Оптимизация производительности
+- **Улучшена скорость работы системы**
+  - Оптимизированы запросы к базе данных
+  - Устранены лишние проверки аутентификации
+  - Улучшена работа с токенами и сессиями
+
+### Технические детали
+
+#### Изменения в auth_utils.py
+```python
+# Было: использовался dev_user из настроек
+entity_id=settings.dev_entity_id,
+user_id=settings.dev_entity_id,
+
+# Стало: используется реальный user_id из БД
+entity_id="8",  # Real user ID from database
+user_id="8",     # Real user ID from database
+```
+
+#### Структура пользователя
+- **Единый пользователь системы:**
+  - Username: `demotest`
+  - Email: `demotest@test.com`
+  - Password: `demo`
+  - User ID: `8`
+  - Привязанный API ключ Anthropic для работы с Claude
+
+#### Исправления в базе данных
+- Удалены дублирующиеся пользователи
+- Очищены неправильные привязки API ключей
+- Восстановлена целостность данных
+
+### Инструкция для менеджеров
+
+#### Что было сделано:
+1. **Решена критическая проблема** с множественными пользователями в системе
+2. **Унифицирована аутентификация** - теперь один пользователь для всей системы
+3. **API ключи работают корректно** - привязаны к реальному пользователю
+4. **История чатов сохраняется** и доступна после перезагрузки
+
+#### Как использовать:
+1. Войти в систему: http://localhost:8080/login.html
+2. Использовать учетные данные:
+   - Username: `demotest`
+   - Password: `demo`
+3. После входа вы будете перенаправлены в основное приложение
+4. Все чаты будут сохраняться автоматически
+5. API ключи привязываются к вашему аккаунту
+
+#### Преимущества для бизнеса:
+- ✅ Стабильная работа системы без потери данных
+- ✅ Корректная работа с API ключами (экономия на лицензиях)
+- ✅ Сохранение всей истории взаимодействий
+- ✅ Единая точка входа для всех пользователей
+
+---
+
+## [0.4.9] - 2025-08-22
+
+### Major Update - UI Migration & Authentication System
 
 ### Added
-- Authentication migration script for 70-80% performance improvement
-- Database indexes on users table (email, username, created_at, last_login)
-- Optimized build configuration with experimental features
-- Migration scripts in /scripts directory
+- **Standalone Authentication Service**
+  - Created separate auth-service on port 8080 with simple HTML pages
+  - Implemented clean registration and login pages without framework dependencies
+  - Added redirect mechanism for token transfer between domains
+  - Python HTTP server for serving auth pages
 
-### Optimized
-- Authentication system now 70-80% faster with database indexes
-- Build configuration optimized for production deployment
-- Bundle size reduced with optimizePackageImports
-- Image handling improved with proper domain configuration
+- **Cross-Domain Authentication**
+  - Implemented `/api/auth/callback` endpoint for secure token transfer
+  - Added localStorage synchronization between ports 8080 and 3000
+  - Cookie-based session management with 24-hour expiration
 
-## [Previous] - 2025-08-19 (Earlier)
-
-### Fixed
-- Worker container connection to remote PostgreSQL (135.181.106.12)
-- Docker entrypoint script now correctly handles remote services
-- Removed duplicate local Redis and Ollama containers that were not being used
-- Fixed PostgreSQL URI format conversion for asyncpg (postgresql+asyncpg:// -> postgresql://)
+- **User Experience Improvements**
+  - Removed duplicate user profile from header (kept only sidebar profile)
+  - Fixed username display to show actual logged-in user instead of defaults
+  - Added debug page for authentication troubleshooting
 
 ### Changed
-- Created custom docker-entrypoint.sh that properly checks remote PostgreSQL connection
-- Modified docker-compose.local.yml to use custom entrypoint via volume mount
-- Optimized container architecture: only API, Worker, and UI run locally
-- All heavy services (PostgreSQL, Redis, Ollama) now correctly use remote server
+- **UI Updated to Official Morphik v0.4.7**
+  - Successfully migrated from v0.4.2 to official v0.4.7
+  - Preserved all custom configurations from morphik.toml
+  - Maintained connection to remote PostgreSQL (135.181.106.12)
+  
+- **Authentication Flow**
+  - Moved from integrated React auth to standalone HTML service
+  - Simplified login/logout process with clear redirects
+  - Removed built-in /login and /register pages from main UI
+
+### Fixed
+- **PostgreSQL Integration**
+  - Fixed Worker service compatibility with remote database
+  - Resolved UUID/Integer type mismatch in users table
+  - Corrected auth.py to work with PostgreSQL SERIAL auto-increment
+
+- **UI Context & State Management**
+  - Fixed userProfile loading from localStorage
+  - Corrected morphik-context.tsx to properly handle user data
+  - Resolved middleware redirects for unauthorized access
 
 ### Technical Details
-- Problem: Worker container was trying to connect to local 'postgres' hostname instead of remote IP
-- Solution: Custom entrypoint script that:
-  - Extracts PostgreSQL host from POSTGRES_URI environment variable
-  - Converts SQLAlchemy URI format to asyncpg format
-  - Uses Python asyncpg to verify connection with proper timeout and retry logic
-- Implementation: Volume mount docker-entrypoint.sh as /app/docker-entrypoint-custom.sh in worker service
+- **Architecture**:
+  - Auth Service: `localhost:8080` (HTML/JS)
+  - UI Service: `localhost:3000` (Next.js)
+  - API Service: `localhost:8000` (FastAPI)
+  - Database: `135.181.106.12:5432` (PostgreSQL)
 
-## [Previous] - 2025-08-18
+- **Security**:
+  - JWT tokens with 7-day expiration
+  - SHA256 + salt password hashing
+  - Secure cross-domain token transfer
+  - httpOnly cookies for session management
 
-### Fixed
-- Model filtering now correctly shows only available models based on API keys
-- Removed duplicate model entries in UI (eliminated "Custom model" duplicates)
-- User authentication system - corrected password hashing format
-- Updated all documentation with correct login credentials
-- Fixed morphik.toml to comment out models without API keys
+### Migration Guide
+See [UI Update Guide](./README/UI_UPDATE_GUIDE.md) for detailed instructions on updating UI while preserving authentication.
 
-### Added
-- Smart model filtering based on available API keys in database
-- New `create_user.py` script for user management
-- `UserData.md` documentation file with complete authentication details
-- Support for multiple user accounts (test@example.com, fedor@example.com)
-- ModelSelectorHeader component for potential header placement
-
-### Changed
-- Model availability now determined by API keys stored in database (not env vars)
-- Authentication now uses email as username (e.g., test@example.com)
-- Password hashing uses SHA256 with salt format: {salt}${hash}
-- Updated all README files with correct login credentials
-- Disabled custom models endpoint to prevent duplicates
-- Models endpoint now returns only genuinely available models
-
-### Technical Improvements
-- Backend `/models` endpoint filters based on database-stored API keys
-- Ollama models always available (local, no key required)
-- Removed redundant custom models loading in UI
-- Improved model provider detection logic
-
-### Documentation
-- Created comprehensive UserData.md with authentication details
-- Updated README files in both /README/ and /Test/Morphik_local/
-- Added troubleshooting guide for authentication issues
-- Corrected architecture description (hybrid local/remote setup)
-
-## [Previous] - 2025-07-31
-
-### Added
-- Separated infrastructure setup for shared services (Ollama, Redis, PostgreSQL)
-- New clean docker-compose configurations for stable and experimental versions
-- Ability to run both versions simultaneously on different ports
-- Automated Ollama model loading in experimental environment
-- Shared network architecture for better service communication
+## [0.4.8] - 2025-08-21
 
 ### Fixed
-- Worker connection to Ollama service in experimental environment
-- File upload processing now completes successfully
-- Network isolation issues between different docker-compose setups
-- Model loading and embedding generation workflow
+- Critical fix for chat history persistence in PostgreSQL
+- Resolved timestamp type casting error preventing chats from being saved
+- Fixed `upsert_chat_history` method to use `CURRENT_TIMESTAMP` instead of text casting
 
 ### Changed
-- Restructured project to separate infrastructure from application code
-- Experimental version now uses dedicated Ollama instance
-- Improved docker network configuration for service discovery
-- Updated ports: Experimental (UI: 3001, API: 8001), Stable (UI: 3000, API: 8000)
+- Database layer now correctly handles timestamp fields for chat history
+- Chat sessions properly persist across user sessions
 
-### Technical Details
-- Fixed "Name or service not known" error for Ollama connection
-- Worker now properly connects to Ollama at http://ollama:11434
-- File processing status correctly updates from "processing" to "completed"
-- Both llama3.2:3b and nomic-embed-text models loaded and working
+## [0.4.7] - 2025-08-20
 
-## [0.2.1] - 2025-07-30
+### Added
+- Force update UI script (force_update_ui.sh) for complete UI refresh
+- Morphik UI diagnostic script (morphik_ui_diagnostic.sh) for system health checks
+- New modern chat interface with sidebar chat history
+- Improved UI layout with "Let's dive into your knowledge" welcome message
+- Chat history functionality imported from upstream Morphik repository
+
+### Fixed
+- Removed duplicate UI installation in /Morphik_local/Morphik_local directory
+- Resolved UI version conflicts between 0.4.1 and 0.4.7
+- Fixed Docker cache issues preventing UI updates
+- Corrected UI routing to use new version consistently
+
+### Changed
+- UI updated from version 0.4.1 to 0.4.7
+- Migrated to single UI location in Test/Morphik_local
+- Improved Docker build process with proper cache management
+- Enhanced chat interface with better user experience
+
+### Infrastructure
+- Cleaned up 18.39GB of Docker cache
+- Optimized container build process
+- Removed redundant UI components
+
+## [Current] - 2025-07-30
 
 ### Fixed
 - Replaced all hardcoded api.morphik.ai URLs with localhost:8000
@@ -160,12 +233,10 @@
 - Secure session management with Redis
 
 ### Infrastructure
-- Hybrid architecture: core services in Docker, shared resources on remote server
-- Backend API and Worker running in local Docker containers
-- PostgreSQL and Ollama hosted on remote server (135.181.106.12)
-- UI runs locally via npm dev server (development) or Docker (production)
-- Proper network configuration for local-remote communication
-- Volume persistence for local data storage
+- All services running in Docker containers
+- Proper port mappings and network configuration
+- Volume persistence for data
+- Health checks for service monitoring
 
 ## Migration Notes
 
