@@ -31,9 +31,10 @@ def get_system_message() -> Dict[str, str]:
 4. When relevant, cite specific parts of the context to support your answers
 5. For image-based queries, analyze the visual content in conjunction with any text context provided
 6. Format your responses using Markdown.
+7. ВАЖНО: Всегда отвечай на РУССКОМ языке, если пользователь не просит использовать другой язык.
 
 Remember: Your primary goal is to provide accurate, context-aware responses that help users understand
-and utilize the information in their documents effectively.""",
+and utilize the information in their documents effectively. Always respond in RUSSIAN language unless specifically asked otherwise.""",
     }
 
 
@@ -475,6 +476,29 @@ class LiteLLMCompletionModel(BaseCompletionModel):
         for key, value in config.items():
             if key not in ["model", "model_name"]:
                 model_params[key] = value
+        
+        # Explicitly handle API keys for different providers
+        logger.info(f"Config received: {config}")
+        logger.info(f"Model name: {model_name}")
+        
+        if "api_key" in config:
+            import os
+            logger.info(f"API key found in config, length: {len(config['api_key'])}")
+            # Set environment variable temporarily for LiteLLM
+            if "anthropic" in model_name.lower() or "claude" in model_name.lower():
+                os.environ["ANTHROPIC_API_KEY"] = config["api_key"]
+                model_params["api_key"] = config["api_key"]
+                logger.info("Set ANTHROPIC_API_KEY in environment")
+            elif "openai" in model_name.lower() or "gpt" in model_name.lower():
+                os.environ["OPENAI_API_KEY"] = config["api_key"]
+                model_params["api_key"] = config["api_key"]
+                logger.info("Set OPENAI_API_KEY in environment")
+            elif "gemini" in model_name.lower() or "google" in model_name.lower():
+                os.environ["GEMINI_API_KEY"] = config["api_key"]
+                model_params["api_key"] = config["api_key"]
+                logger.info("Set GEMINI_API_KEY in environment")
+        else:
+            logger.warning("No api_key found in config")
 
         logger.debug(f"Calling LiteLLM streaming with params: {model_params}")
         response = await litellm.acompletion(**model_params)

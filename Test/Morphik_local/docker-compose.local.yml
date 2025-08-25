@@ -28,6 +28,7 @@ services:
       - REDIS_HOST=135.181.106.12
       - REDIS_PORT=6379
       - OLLAMA_BASE_URL=http://135.181.106.12:11434
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
     volumes:
       - ./core:/app/core
       - ./storage:/app/storage
@@ -55,7 +56,9 @@ services:
       - LOG_LEVEL=DEBUG
       - REDIS_HOST=135.181.106.12
       - REDIS_PORT=6379
+      - REDIS_URL=redis://135.181.106.12:6379/0
       - OLLAMA_BASE_URL=http://135.181.106.12:11434
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
     volumes:
       - ./docker-entrypoint.sh:/app/docker-entrypoint-custom.sh
       - ./core:/app/core

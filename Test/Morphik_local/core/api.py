@@ -682,6 +682,41 @@ async def query_completion(
                 model_config = settings.REGISTERED_MODELS[model_key]
                 llm_config["model"] = model_config.get("model_name", model_key)
                 logger.info(f"Mapped model key '{model_key}' to '{llm_config['model']}'")
+            
+            # If API key is not provided in llm_config, try to get it from database
+            if "api_key" not in llm_config and auth.user_id and auth.app_id:
+                try:
+                    # Get API keys from database
+                    configs = await document_service.db.get_model_configs(
+                        user_id=auth.user_id,
+                        app_id=auth.app_id
+                    )
+                    
+                    # Determine provider from model name
+                    model_name = llm_config.get("model", "").lower()
+                    provider = None
+                    
+                    if "anthropic" in model_name or "claude" in model_name:
+                        provider = "anthropic"
+                    elif "openai" in model_name or "gpt" in model_name:
+                        provider = "openai"
+                    elif "gemini" in model_name or "google" in model_name:
+                        provider = "google"
+                    elif "groq" in model_name:
+                        provider = "groq"
+                    elif "deepseek" in model_name:
+                        provider = "deepseek"
+                    
+                    # Find API key for the provider
+                    if provider:
+                        for config in configs:
+                            if config.provider == provider and config.config_data.get("apiKey"):
+                                llm_config["api_key"] = config.config_data["apiKey"]
+                                logger.info(f"Added API key for provider '{provider}' from database")
+                                break
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to retrieve API key from database: {e}")
 
         # Main query processing
         perf.start_phase("document_service_query")

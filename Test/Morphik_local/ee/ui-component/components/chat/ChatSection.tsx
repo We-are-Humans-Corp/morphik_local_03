@@ -139,6 +139,34 @@ const ChatSection: React.FC<ChatSectionProps> = ({
     safeUpdateOption("inline_citations", inlineCitationsEnabled);
   }, [inlineCitationsEnabled, safeUpdateOption]);
 
+  // Sync selected model and API key with queryOptions
+  React.useEffect(() => {
+    if (selectedModel && updateQueryOption) {
+      // Get API keys from localStorage
+      const savedConfig = localStorage.getItem("morphik_api_keys");
+      let apiKey = "";
+      
+      if (savedConfig) {
+        try {
+          const config = JSON.parse(savedConfig);
+          // Find the provider for the selected model
+          const model = availableModels.find(m => m.id === selectedModel);
+          if (model && config[model.provider]) {
+            apiKey = config[model.provider].apiKey || "";
+          }
+        } catch (e) {
+          console.error("Failed to parse API keys from localStorage:", e);
+        }
+      }
+
+      // Update llm_config in queryOptions
+      updateQueryOption("llm_config", {
+        model: selectedModel,
+        api_key: apiKey
+      });
+    }
+  }, [selectedModel, updateQueryOption, availableModels]);
+
   // Derive safe option values with sensible defaults to avoid undefined issues in UI
   const safeQueryOptions: Required<
     Pick<QueryOptions, "k" | "min_score" | "temperature" | "max_tokens" | "padding" | "inline_citations">
@@ -252,8 +280,8 @@ const ChatSection: React.FC<ChatSectionProps> = ({
 
     setLoadingGraphs(true);
     try {
-      console.log(`Fetching graphs from: ${apiBaseUrl}/graph`);
-      const response = await fetch(`${apiBaseUrl}/graph`, {
+      console.log(`Fetching graphs from: ${apiBaseUrl}/graphs`);
+      const response = await fetch(`${apiBaseUrl}/graphs`, {
         headers: {
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
@@ -490,6 +518,29 @@ const ChatSection: React.FC<ChatSectionProps> = ({
   };
 
   const submitForm = () => {
+    // Update llm_config with selected model and API key before submitting
+    if (selectedModel && selectedModel !== "default" && updateQueryOption) {
+      const savedConfig = localStorage.getItem("morphik_api_keys");
+      let apiKey = "";
+      
+      if (savedConfig) {
+        try {
+          const config = JSON.parse(savedConfig);
+          const model = availableModels.find(m => m.id === selectedModel);
+          if (model && config[model.provider]) {
+            apiKey = config[model.provider].apiKey || "";
+          }
+        } catch (e) {
+          console.error("Failed to parse API keys:", e);
+        }
+      }
+      
+      updateQueryOption("llm_config", {
+        model: selectedModel,
+        api_key: apiKey
+      });
+    }
+    
     if (isAgentMode) {
       handleAgentSubmit();
     } else {

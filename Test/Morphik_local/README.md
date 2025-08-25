@@ -38,11 +38,13 @@ cd auth-service && ./start.sh
 ## Features
 
 - 📄 **Document Processing**: Parse PDFs, DOCX, images, and more
-- 🔍 **Multimodal Search**: Search across text and visual content
+- 🔍 **Multimodal Search**: Search across text and visual content with ColPali
 - 💬 **AI Chat**: Context-aware conversations with your documents
 - 🕸️ **Knowledge Graphs**: Automatic entity and relationship extraction
 - 🏠 **Local LLMs**: Run completely offline with Ollama
+- 🚀 **GPU Processing**: ColPali serverless GPU for visual PDF understanding
 - 🔒 **Secure**: JWT authentication with proper password hashing
+- 💰 **Cost Efficient**: Pay-per-use GPU scaling (idle → off)
 
 ## Documentation
 
@@ -128,18 +130,28 @@ docker compose logs postgres
 docker compose restart postgres
 ```
 
-## Latest Updates (v0.4.10)
+## Latest Updates (v0.4.11)
 
-### 🔐 Unified User System
-- Single user authentication across all services
-- API keys properly linked to real users
-- Chat history correctly saved and persisted
-- Optimized performance and reduced latency
+### 🚀 ColPali GPU Integration
+- **Visual PDF Processing**: Advanced understanding of images, tables, charts in documents
+- **RunPod Serverless**: GPU auto-scaling with pay-per-use pricing
+- **24GB GPU Power**: High-performance visual content analysis
+- **Seamless Integration**: Automatic processing during document upload
+
+### 🏗️ Enhanced Architecture
+- **3-Tier System**: Local UI/API → Hetzner Server → RunPod GPU
+- **Cost Optimization**: GPU resources only when needed (idle → off)
+- **Scalable Design**: Handle complex visual documents efficiently
+
+### ⚙️ Configuration Updates
+- **morphik.toml**: ColPali enabled with RunPod endpoint
+- **Environment**: RUNPOD_API_KEY for GPU access
+- **Auto-scaling**: Smart resource management
 
 ### 🚀 Quick Start After Update
-1. Ensure auth-service is running: `cd auth-service && python3 server.py`
-2. Login with credentials: username `demotest`, password `demo`
-3. All your chats and API keys will be automatically linked
+1. System automatically uses ColPali for PDF processing
+2. No additional setup required - everything is pre-configured
+3. Upload PDFs with images/charts for enhanced visual understanding
 
 ## Support
 

@@ -256,7 +256,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
       try {
         // Fetch visualization data from the API
         const headers = createHeaders();
-        const response = await fetch(`${apiBaseUrl}/graph/${encodeURIComponent(graph.name)}/visualization`, {
+        const response = await fetch(`${apiBaseUrl}/graphs/${encodeURIComponent(graph.name)}/visualization`, {
           headers,
         });
 
@@ -336,7 +336,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
     try {
       setLoading(true);
       const headers = createHeaders();
-      const response = await fetch(`${apiBaseUrl}/graph`, { headers });
+      const response = await fetch(`${apiBaseUrl}/graphs`, { headers });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch graphs: ${response.statusText}`);
@@ -416,7 +416,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
         setLoading(true);
         setError(null); // Clear previous errors
         const headers = createHeaders();
-        const response = await fetch(`${apiBaseUrl}/graph/${encodeURIComponent(graphName)}`, {
+        const response = await fetch(`${apiBaseUrl}/graphs/${encodeURIComponent(graphName)}`, {
           headers,
         });
 
@@ -456,7 +456,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
     async (graphName: string): Promise<GraphStatusResponse> => {
       try {
         const headers = createHeaders();
-        const url = `${apiBaseUrl}/graph/${encodeURIComponent(graphName)}/status`;
+        const url = `${apiBaseUrl}/graphs/${encodeURIComponent(graphName)}/status`;
         const response = await fetch(url, {
           method: "GET",
           headers,
@@ -485,7 +485,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
   //         params.append("run_id", runId);
   //       }
 
-  //       const url = `${apiBaseUrl}/graph/workflow/${encodeURIComponent(workflowId)}/status${params.toString() ? `?${params}` : ""}`;
+  //       const url = `${apiBaseUrl}/graphs/workflow/${encodeURIComponent(workflowId)}/status${params.toString() ? `?${params}` : ""}`;
   //       const response = await fetch(url, {
   //         method: "GET",
   //         headers,
@@ -533,7 +533,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
       }
 
       const headers = createHeaders("application/json");
-      const response = await fetch(`${apiBaseUrl}/graph/create`, {
+      const response = await fetch(`${apiBaseUrl}/graphs/create`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -608,7 +608,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
       }
 
       const headers = createHeaders("application/json");
-      const response = await fetch(`${apiBaseUrl}/graph/${encodeURIComponent(selectedGraph.name)}/update`, {
+      const response = await fetch(`${apiBaseUrl}/graphs/${encodeURIComponent(selectedGraph.name)}/update`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -727,7 +727,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({
     setIsDeletingGraph(true);
     try {
       const headers = createHeaders();
-      const response = await fetch(`${apiBaseUrl}/graph/${encodeURIComponent(graphToDelete)}`, {
+      const response = await fetch(`${apiBaseUrl}/graphs/${encodeURIComponent(graphToDelete)}`, {
         method: "DELETE",
         headers,
       });
