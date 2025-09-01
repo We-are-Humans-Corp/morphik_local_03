@@ -130,28 +130,39 @@ docker compose logs postgres
 docker compose restart postgres
 ```
 
-## Latest Updates (v0.4.11)
+## Latest Updates (v0.4.12)
 
-### 🚀 ColPali GPU Integration
-- **Visual PDF Processing**: Advanced understanding of images, tables, charts in documents
-- **RunPod Serverless**: GPU auto-scaling with pay-per-use pricing
-- **24GB GPU Power**: High-performance visual content analysis
-- **Seamless Integration**: Automatic processing during document upload
+### 🗄️ MinIO S3 Storage Integration
+- **S3-Compatible Storage**: Successfully integrated MinIO for document storage
+- **Remote Storage**: Files stored on Hetzner server (135.181.106.12:32000)
+- **AWS SDK Compatible**: Uses standard S3 client with custom endpoint
+- **Bucket Management**: Automatic bucket creation and management
 
-### 🏗️ Enhanced Architecture
-- **3-Tier System**: Local UI/API → Hetzner Server → RunPod GPU
-- **Cost Optimization**: GPU resources only when needed (idle → off)
-- **Scalable Design**: Handle complex visual documents efficiently
+### 🚀 ColPali Visual Processing
+- **Modal.com Integration**: Serverless GPU processing for PDF visual content
+- **Visual Understanding**: Tables, charts, diagrams processed with AI
+- **Auto-scaling**: Pay-per-use model with automatic idle shutdown
+- **Multi-vector Embeddings**: Both text and visual embeddings stored
 
-### ⚙️ Configuration Updates
-- **morphik.toml**: ColPali enabled with RunPod endpoint
-- **Environment**: RUNPOD_API_KEY for GPU access
-- **Auto-scaling**: Smart resource management
+### 🔧 Critical Fixes
+- **AWS Credentials**: Fixed compatibility issues with MinIO authentication
+- **Endpoint Support**: Added custom endpoint_url for S3-compatible storage
+- **403 Errors**: Resolved upload permissions and bucket access issues
+- **Database Cleanup**: Removed legacy documents for clean operation
 
-### 🚀 Quick Start After Update
-1. System automatically uses ColPali for PDF processing
-2. No additional setup required - everything is pre-configured
-3. Upload PDFs with images/charts for enhanced visual understanding
+### ⚙️ Configuration
+- **MinIO Endpoint**: http://135.181.106.12:32000
+- **Bucket**: morphik-storage
+- **Environment Variables**: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL
+- **Docker Compose**: Updated with complete MinIO configuration
+
+### ✅ Verified Functionality
+- Document upload and storage in MinIO
+- ColPali PDF processing through Modal.com
+- Text embeddings via Ollama (llama3.2:3b)
+- Visual embeddings via ColPali (32 embeddings for test PDF)
+- Model selection between Ollama and Claude models
+- Full pipeline from upload to chat interaction
 
 ## Support
 
