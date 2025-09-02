@@ -11,7 +11,7 @@ import tomli
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware  # Import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+# from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -132,14 +132,14 @@ app.add_middleware(
 telemetry = TelemetryService()
 
 # OpenTelemetry instrumentation – exclude noisy spans/headers
-FastAPIInstrumentor.instrument_app(
-    app,
-    excluded_urls="health,health/.*",
-    exclude_spans=["send", "receive"],
-    http_capture_headers_server_request=None,
-    http_capture_headers_server_response=None,
-    tracer_provider=None,
-)
+# FastAPIInstrumentor.instrument_app(
+#     app,
+#     excluded_urls="health,health/.*",
+#     exclude_spans=["send", "receive"],
+#     http_capture_headers_server_request=None,
+#     http_capture_headers_server_response=None,
+#     tracer_provider=None,
+# )
 
 # Global settings object
 settings = get_settings()

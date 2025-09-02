@@ -98,14 +98,16 @@ use_fp16 = true
 device = "cpu" # use "cpu" if on docker and using a mac, "cuda" if cuda enabled device
 
 [storage]
-provider = "local"
-storage_path = "./storage"
+provider = "aws-s3"
+region = "us-east-1"
+bucket_name = "morphik-storage"
+storage_path = "morphik_app"
+endpoint_url = "http://135.181.106.12:32000"  # MinIO endpoint
 
+# Example for local storage:
 # [storage]
-# provider = "aws-s3"
-# region = "us-east-2"
-# bucket_name = "morphik-s3-storage"
-# storage_path = "morphik-storage"
+# provider = "local"
+# storage_path = "./storage"
 
 [vector_store]
 provider = "pgvector"
@@ -122,8 +124,8 @@ enable_colpali = true  # Включаем ColPali через RunPod
 mode = "self_hosted"  # "cloud" or "self_hosted"
 api_domain = "api.morphik.ai"  # API domain for cloud URIs
 # RunPod ColPali endpoint
-morphik_embedding_api_domain = "https://api.runpod.ai/v2/fl73vpjsrfqhmn/runsync"  # RunPod endpoint для ColPali
-colpali_mode = "api" # "off", "local", or "api" - используем через RunPod API
+morphik_embedding_api_domain = "https://rugusev--colpali-morphik-official-fastapi-app.modal.run"  # Modal ColPali Official Morphik version with A100
+colpali_mode = "api" # "off", "local", or "api" - используем через Modal API
 
 [pdf_viewer]
 frontend_url = "http://localhost:3000/api/pdf" # "https://morphik.ai/api/pdf" # "http://localhost:3000/api/pdf" # "https://morphik.ai/api/pdf"

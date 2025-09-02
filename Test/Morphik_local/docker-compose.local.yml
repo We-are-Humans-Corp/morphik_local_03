@@ -28,7 +28,13 @@ services:
       - REDIS_HOST=135.181.106.12
       - REDIS_PORT=6379
       - OLLAMA_BASE_URL=http://135.181.106.12:11434
-      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - AWS_ACCESS_KEY_ID=uvqsdyUADcc1Uygu298j
+      - AWS_ACCESS_KEY=uvqsdyUADcc1Uygu298j
+      - AWS_SECRET_ACCESS_KEY=3jwYrh9tIstk9EL8vmLMfnZwRqHdzssGfRR391or
+      - AWS_ENDPOINT_URL=http://135.181.106.12:32000
+      - S3_ENDPOINT_URL=http://135.181.106.12:32000
+      # - RUNPOD_API_KEY=${RUNPOD_API_KEY}  # Not using RunPod, using Modal
+      # - MORPHIK_EMBEDDING_API_KEY=${RUNPOD_API_KEY}
     volumes:
       - ./core:/app/core
       - ./storage:/app/storage
@@ -40,8 +46,8 @@ services:
         condition: service_completed_successfully
     networks:
       - morphik-network
-    env_file:
-      - .env
+    # env_file:
+    #   - .env  # Not needed, using Modal instead of RunPod
 
   worker:
     build:
@@ -58,7 +64,13 @@ services:
       - REDIS_PORT=6379
       - REDIS_URL=redis://135.181.106.12:6379/0
       - OLLAMA_BASE_URL=http://135.181.106.12:11434
-      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - AWS_ACCESS_KEY_ID=uvqsdyUADcc1Uygu298j
+      - AWS_ACCESS_KEY=uvqsdyUADcc1Uygu298j
+      - AWS_SECRET_ACCESS_KEY=3jwYrh9tIstk9EL8vmLMfnZwRqHdzssGfRR391or
+      - AWS_ENDPOINT_URL=http://135.181.106.12:32000
+      - S3_ENDPOINT_URL=http://135.181.106.12:32000
+      # - RUNPOD_API_KEY=${RUNPOD_API_KEY}  # Not using RunPod, using Modal
+      # - MORPHIK_EMBEDDING_API_KEY=${RUNPOD_API_KEY}
     volumes:
       - ./docker-entrypoint.sh:/app/docker-entrypoint-custom.sh
       - ./core:/app/core
@@ -71,8 +83,8 @@ services:
         condition: service_completed_successfully
     networks:
       - morphik-network
-    env_file:
-      - .env
+    # env_file:
+    #   - .env  # Not needed, using Modal instead of RunPod
 
   ui:
     build:
