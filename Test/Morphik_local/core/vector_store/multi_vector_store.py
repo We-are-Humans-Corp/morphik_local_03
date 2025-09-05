@@ -85,7 +85,7 @@ class MultiVectorStore(BaseVectorStore):
             if settings.STORAGE_PROVIDER == "aws-s3":
                 logger.info("Initializing S3 storage for multi-vector chunks")
                 return S3Storage(
-                    aws_access_key=settings.AWS_ACCESS_KEY,
+                    aws_access_key=settings.AWS_ACCESS_KEY_ID,
                     aws_secret_key=settings.AWS_SECRET_ACCESS_KEY,
                     region_name=settings.AWS_REGION,
                     default_bucket=MULTIVECTOR_CHUNKS_BUCKET,
@@ -359,8 +359,29 @@ class MultiVectorStore(BaseVectorStore):
             else:
                 logger.debug(f"Using provided app_id: {app_id} for document {document_id}")
 
-            # Determine file extension
-            extension = self._determine_file_extension(content, chunk_metadata)
+            # For data URI images, extract the actual base64 content and determine extension
+            actual_content = content
+            if content.startswith("data:"):
+                # Extract MIME type and base64 content from data URI
+                if ";base64," in content:
+                    mime_part = content.split(";base64,")[0]
+                    mime_type = mime_part.replace("data:", "")
+                    actual_content = content.split(";base64,")[1]
+                    
+                    # Determine extension from MIME type
+                    mime_to_ext = {
+                        "image/png": ".png",
+                        "image/jpeg": ".jpg",
+                        "image/jpg": ".jpg",
+                        "image/gif": ".gif",
+                        "image/webp": ".webp",
+                    }
+                    extension = mime_to_ext.get(mime_type, ".png")
+                else:
+                    extension = self._determine_file_extension(content, chunk_metadata)
+            else:
+                # Determine file extension normally
+                extension = self._determine_file_extension(content, chunk_metadata)
 
             # Generate storage key
             storage_key = self._generate_storage_key(app_id, document_id, chunk_number, extension)
@@ -427,9 +448,11 @@ class MultiVectorStore(BaseVectorStore):
                     logger.debug(f"Chunk metadata indicates is_image: {is_image}")
 
                     if is_image:
-                        # For images, return as base64 string
-                        result = base64.b64encode(content_bytes).decode("utf-8")
-                        logger.debug(f"Returning image as base64, length: {len(result)}")
+                        # For images, return as data URI for browser display
+                        base64_content = base64.b64encode(content_bytes).decode("utf-8")
+                        # Add data URI prefix for proper browser display
+                        result = f"data:image/png;base64,{base64_content}"
+                        logger.debug(f"Returning image as data URI, length: {len(result)}")
                         return result
                     else:
                         # For text, return decoded string
@@ -477,11 +500,17 @@ class MultiVectorStore(BaseVectorStore):
 
             # Handle content storage (external vs database)
             content_to_store = chunk.content
-
-            if self.enable_external_storage and self.storage:
-                # Try to store content externally
+            
+            # Check if this is a ColPali image - these should be stored directly in DB
+            is_colpali_image = False
+            if chunk.metadata:
+                is_colpali_image = chunk.metadata.get("is_image", False)
+            
+            # Only use external storage for non-image content
+            if self.enable_external_storage and self.storage and not is_colpali_image:
+                # Try to store content externally (for text content only)
                 storage_key = await self._store_content_externally(
-                    chunk.content, chunk.document_id, chunk.chunk_number, str(chunk.metadata), app_id
+                    chunk.content, chunk.document_id, chunk.chunk_number, json.dumps(chunk.metadata), app_id
                 )
 
                 if storage_key:
@@ -491,13 +520,16 @@ class MultiVectorStore(BaseVectorStore):
                     logger.warning(
                         f"Failed to store chunk {chunk.document_id}-{chunk.chunk_number} externally, using database"
                     )
+            elif is_colpali_image:
+                # For ColPali images, store base64 directly in database
+                logger.debug(f"Storing ColPali image {chunk.document_id}-{chunk.chunk_number} directly in database")
 
             rows.append(
                 (
                     chunk.document_id,
                     chunk.chunk_number,
                     content_to_store,
-                    str(chunk.metadata),
+                    json.dumps(chunk.metadata),
                     binary_embeddings,
                 )
             )

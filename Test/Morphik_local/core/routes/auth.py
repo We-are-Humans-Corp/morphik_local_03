@@ -86,9 +86,10 @@ def create_access_token(user_id: str, username: str) -> str:
     expire = datetime.now(UTC) + timedelta(days=7)
     to_encode = {
         "entity_id": user_id,
-        "entity_type": "user",
+        "entity_type": "user", 
         "user_id": user_id,
         "username": username,
+        "app_id": "morphik_app",  # Add app_id for API key access
         "permissions": ["read", "write"],
         "exp": expire
     }

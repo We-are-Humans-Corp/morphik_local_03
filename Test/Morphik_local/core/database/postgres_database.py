@@ -1014,9 +1014,15 @@ class PostgresDatabase(BaseDatabase):
         This optimized version uses direct column access instead of JSONB operations
         for better performance.
 
-        Note: This returns a SQL string with :entity_id and :app_id as named parameters.
+        Note: This returns a SQL string with named parameters.
         The caller must provide these parameters when executing the query.
         """
+        # Cloud mode with app_id - simplified access control
+        if auth.app_id:
+            # When app_id is present, that's the primary access control
+            return "app_id = :app_id"
+        
+        # Fallback for dev/self-hosted mode - use owner-based access control
         # Base clauses using flattened columns with named parameters
         base_clauses = [
             "owner_id = :entity_id",
@@ -1024,15 +1030,8 @@ class PostgresDatabase(BaseDatabase):
             ":entity_id = ANY(writers)",
             ":entity_id = ANY(admins)",
         ]
-
-        # Developer token with app_id → require BOTH app_id match AND standard access
-        if auth.entity_type == EntityType.DEVELOPER and auth.app_id:
-            # Must match app_id AND have at least one of the standard access permissions
-            return f"app_id = :app_id AND ({' OR '.join(base_clauses)})"
-        else:
-            # For non-developer tokens or developer tokens without app_id,
-            # use standard access control
-            return " OR ".join(base_clauses)
+        
+        return " OR ".join(base_clauses)
 
     def _build_metadata_filter(self, filters: Dict[str, Any]) -> str:
         """Build PostgreSQL filter for metadata."""
@@ -1120,10 +1119,11 @@ class PostgresDatabase(BaseDatabase):
         """
         params = {}
 
-        # Add auth parameters
-        params["entity_id"] = auth.entity_id
+        # Add auth parameters based on what's being used in the filter
         if auth.app_id:
             params["app_id"] = auth.app_id
+        elif auth.entity_id:
+            params["entity_id"] = auth.entity_id
 
         # Add system metadata filter parameters
         if system_filters:

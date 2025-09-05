@@ -86,7 +86,7 @@ def create_s3_bucket(bucket_name, region=DEFAULT_REGION):
     # Clear any existing AWS credentials from environment
     boto3.Session().resource("s3").meta.client.close()
 
-    aws_access_key = os.getenv("AWS_ACCESS_KEY")
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
     aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     region = os.getenv("AWS_REGION") or region
 
@@ -127,7 +127,7 @@ def delete_s3_bucket(bucket_name: str) -> None:
         # Explicit session to avoid leaking global credentials just like in
         # *create_s3_bucket* above.
         session = boto3.Session(
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             region_name=os.getenv("AWS_REGION", DEFAULT_REGION),
         )

@@ -122,9 +122,21 @@ async def ingest_file(
         rules_list = json.loads(rules)
 
         def str2bool(v):
+            if v is None:
+                return None
             return v if isinstance(v, bool) else str(v).lower() in {"true", "1", "yes"}
 
         use_colpali_bool = str2bool(use_colpali)
+        logger.info(f"Initial use_colpali value: {use_colpali}, converted to: {use_colpali_bool}")
+        logger.info(f"ENABLE_COLPALI setting: {settings.ENABLE_COLPALI}")
+        
+        # Auto-enable ColPali for PDF files when ENABLE_COLPALI is true
+        if use_colpali_bool is None and settings.ENABLE_COLPALI:
+            if file.filename and file.filename.lower().endswith('.pdf'):
+                use_colpali_bool = True
+                logger.info(f"Auto-enabled ColPali for PDF file: {file.filename}")
+        
+        logger.info(f"Final use_colpali_bool value before passing to worker: {use_colpali_bool}")
 
         if "write" not in auth.permissions:
             raise PermissionError("User does not have write permission")
@@ -291,9 +303,13 @@ async def batch_ingest_files(
         rules_list = json.loads(rules)
 
         def str2bool(v):
-            return str(v).lower() in {"true", "1", "yes"}
-
+            if v is None:
+                return None
+            return v if isinstance(v, bool) else str(v).lower() in {"true", "1", "yes"}
+        
         use_colpali_bool = str2bool(use_colpali)
+        logger.info(f"[BATCH] Initial use_colpali: {use_colpali}, converted to: {use_colpali_bool}")
+        logger.info(f"[BATCH] ENABLE_COLPALI setting: {settings.ENABLE_COLPALI}")
 
         if "write" not in auth.permissions:
             raise PermissionError("User does not have write permission")
@@ -335,6 +351,13 @@ async def batch_ingest_files(
                 if isinstance(rules_list, list) and rules_list and isinstance(rules_list[0], list)
                 else rules_list
             )
+            
+            # Auto-enable ColPali for each PDF file when ENABLE_COLPALI is true
+            file_use_colpali = use_colpali_bool
+            if file_use_colpali is None and settings.ENABLE_COLPALI:
+                if file.filename and file.filename.lower().endswith('.pdf'):
+                    file_use_colpali = True
+                    logger.info(f"Auto-enabled ColPali for PDF file: {file.filename}")
 
             # ------------------------------------------------------------------
             # Create stub Document (processing)
@@ -402,7 +425,7 @@ async def batch_ingest_files(
                 metadata_json=metadata_json,
                 auth_dict=auth_dict,
                 rules_list=file_rules,
-                use_colpali=use_colpali_bool,
+                use_colpali=file_use_colpali,
                 folder_name=folder_name,
                 end_user_id=end_user_id,
             )

@@ -12,12 +12,13 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Type, Union
 
 import arq
 import filetype
+import fitz  # PyMuPDF - faster alternative to pdf2image
 import pdf2image
-import torch
-from colpali_engine.models import ColIdefics3, ColIdefics3Processor
+
+# from colpali_engine.models import ColIdefics3, ColIdefics3Processor
 from fastapi import HTTPException, UploadFile
 from filetype.types import IMAGE  # , DOCUMENT, document
-from PIL.Image import Image
+from PIL import Image as PILImage
 from pydantic import BaseModel
 
 from core.cache.base_cache import BaseCache
@@ -84,10 +85,17 @@ class DocumentService:
                 if document_id not in folder.document_ids:
                     success = await self.db.add_document_to_folder(folder.id, document_id, auth)
                     if not success:
-                        logger.warning(f"Failed to add document {document_id} to existing folder {folder.name}")
+                        logger.warning(
+                            f"Failed to add document {document_id} to existing folder {folder.name}. This may be due to a race condition during ingestion - the document should be accessible shortly."
+                        )
+                        # Return the folder anyway since it exists, even if document addition failed
+                        # The retry mechanism in add_document_to_folder should handle transient issues
                     else:
+                        logger.info(f"Successfully added document {document_id} to existing folder {folder.name}")
                         # Queue workflows associated with this folder
                         await self._queue_folder_workflows(folder, document_id, auth)
+                else:
+                    logger.info(f"Document {document_id} is already in folder {folder.name}")
                 return folder  # Folder already exists
 
             # Create a new folder
@@ -283,7 +291,7 @@ class DocumentService:
 
         settings = get_settings()
         should_rerank = use_reranking if use_reranking is not None else settings.USE_RERANKING
-        using_colpali = use_colpali if use_colpali is not None else False
+        using_colpali = (use_colpali if use_colpali is not None else False) and settings.ENABLE_COLPALI
 
         # Build system filters for folder_name and end_user_id
         system_filters = {}
@@ -308,9 +316,30 @@ class DocumentService:
         else:
             parallel_start = time.time()
 
+        # Create tasks with individual timing to measure embeddings vs auth separately
+        async def timed_embeddings():
+            embedding_start = time.time()
+            result = await asyncio.gather(*embedding_tasks)
+            embedding_duration = time.time() - embedding_start
+            if perf_tracker:
+                perf_tracker.add_suboperation("retrieve_embeddings", embedding_duration, "retrieve_embeddings_and_auth")
+            else:
+                phase_times["retrieve_embeddings"] = embedding_duration
+            return result
+
+        async def timed_auth():
+            auth_start = time.time()
+            result = await self.db.find_authorized_and_filtered_documents(auth, filters, system_filters)
+            auth_duration = time.time() - auth_start
+            if perf_tracker:
+                perf_tracker.add_suboperation("retrieve_auth", auth_duration, "retrieve_embeddings_and_auth")
+            else:
+                phase_times["retrieve_auth"] = auth_duration
+            return result
+
         results = await asyncio.gather(
-            asyncio.gather(*embedding_tasks),
-            self.db.find_authorized_and_filtered_documents(auth, filters, system_filters),
+            timed_embeddings(),
+            timed_auth(),
         )
 
         embedding_results, doc_ids = results
@@ -318,7 +347,7 @@ class DocumentService:
         query_embedding_multivector = embedding_results[1] if len(embedding_results) > 1 else None
 
         if not perf_tracker:
-            phase_times["embeddings_and_auth"] = time.time() - parallel_start
+            phase_times["retrieve_embeddings_and_auth"] = time.time() - parallel_start
 
         logger.info("Generated query embedding")
 
@@ -479,46 +508,66 @@ class DocumentService:
             # For configuration 2, simply combine the chunks with multivector chunks first
             # since they are generally higher quality
             return chunks_multivector + chunks
-            # if chunks_multivector:
-            #     return chunks_multivector
-            # return chunks
 
         # Configuration 4: Reranking with colpali
         # Use colpali as a reranker to get consistent similarity scores for both types of chunks
+        # IMPORTANT: Multivector chunks already have proper ColPali similarity scores from their vector store,
+        # so we should preserve those. Only rescore regular text chunks to make them comparable.
+        return chunks_multivector + chunks
 
-        model_name = "vidore/colSmol-256M"
-        device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
+    def _count_tokens_simple(self, text: str) -> int:
+        """Simple token counting using whitespace splitting.
 
-        model = ColIdefics3.from_pretrained(
-            model_name,
-            torch_dtype=torch.bfloat16,
-            device_map=device,  # "cuda:0",  # or "mps" if on Apple Silicon
-            attn_implementation="eager",  # "flash_attention_2" if is_flash_attn_2_available() else None,
-            # or "eager" if "mps"
-        ).eval()
-        processor = ColIdefics3Processor.from_pretrained(model_name)
+        This is a conservative estimate that works well for batching purposes.
+        """
+        return len(text.split())
 
-        # Score regular chunks with colpali model for consistent comparison
-        batch_chunks = processor.process_queries([chunk.content for chunk in chunks]).to(device)
-        query_rep = processor.process_queries([query]).to(device)
-        multi_vec_representations = model(**batch_chunks)
-        query_rep = model(**query_rep)
-        scores = processor.score_multi_vector(query_rep, multi_vec_representations)
-        for chunk, score in zip(chunks, scores[0]):
-            chunk.score = score
+    def _batch_chunks_by_tokens(self, chunks: List[DocumentChunk], max_tokens: int = 6000) -> List[List[DocumentChunk]]:
+        """Batch chunks to ensure total token count doesn't exceed max_tokens.
 
-        # Also rescore multivector chunks to ensure consistent scoring
-        if chunks_multivector:
-            mv_batch_chunks = processor.process_queries([chunk.content for chunk in chunks_multivector]).to(device)
-            mv_reps = model(**mv_batch_chunks)
-            mv_scores = processor.score_multi_vector(query_rep, mv_reps)
-            for chunk, score in zip(chunks_multivector, mv_scores[0]):
-                chunk.score = score
+        Args:
+            chunks: List of chunks to batch
+            max_tokens: Maximum tokens per batch (conservative limit under 8192)
 
-        # Combine and sort all chunks
-        full_chunks = chunks + chunks_multivector
-        full_chunks.sort(key=lambda x: x.score, reverse=True)
-        return full_chunks
+        Returns:
+            List of chunk batches
+        """
+        if not chunks:
+            return []
+
+        batches = []
+        current_batch = []
+        current_tokens = 0
+
+        for chunk in chunks:
+            chunk_tokens = self._count_tokens_simple(chunk.content)
+
+            # If a single chunk exceeds the limit, put it in its own batch
+            if chunk_tokens > max_tokens:
+                if current_batch:
+                    batches.append(current_batch)
+                    current_batch = []
+                    current_tokens = 0
+                batches.append([chunk])
+                logger.warning(f"Chunk with {chunk_tokens} tokens exceeds limit of {max_tokens}")
+                continue
+
+            # If adding this chunk would exceed the limit, start a new batch
+            if current_tokens + chunk_tokens > max_tokens:
+                if current_batch:
+                    batches.append(current_batch)
+                current_batch = [chunk]
+                current_tokens = chunk_tokens
+            else:
+                current_batch.append(chunk)
+                current_tokens += chunk_tokens
+
+        # Add the last batch if it has chunks
+        if current_batch:
+            batches.append(current_batch)
+
+        logger.info(f"Created {len(batches)} batches from {len(chunks)} chunks")
+        return batches
 
     async def _apply_padding_to_chunks(
         self,
@@ -601,17 +650,11 @@ class DocumentService:
         padded_image_chunks = [chunk for chunk in padded_chunks if chunk.content.startswith("data")]
         logger.debug(f"Filtered to {len(padded_image_chunks)} image chunks from {len(padded_chunks)} retrieved chunks")
 
-        # # Create a mapping to preserve original scores for matched chunks
-        # original_scores = {(chunk.document_id, chunk.chunk_number): chunk.score for chunk in image_chunks}
-
-        # # Apply original scores to matched chunks, set score to 0 for padding chunks
-        # for chunk in padded_image_chunks:
-        #     key = (chunk.document_id, chunk.chunk_number)
-        #     if key in original_scores:
-        #         chunk.score = original_scores[key]
-        #     else:
-        #         # This is a padding chunk, set a lower score
-        #         chunk.score = 0.0
+        # Preserve original scores for matched chunks; padding gets 0.0
+        original_scores = {(c.document_id, c.chunk_number): c.score for c in image_chunks}
+        for c in padded_image_chunks:
+            key = (c.document_id, c.chunk_number)
+            c.score = original_scores.get(key, 0.0)
         chunk_id = set()
         chunks = []
         for chunk in padded_image_chunks:
@@ -620,8 +663,8 @@ class DocumentService:
             chunks.append(chunk)
             chunk_id.add(f"{chunk.document_id}-{chunk.chunk_number}")
 
-        # Sort by score (original matched chunks first, then padding chunks)
-        chunks.sort(key=lambda x: f"{x.document_id}-{x.chunk_number}", reverse=False)
+        # Sort: matched chunks (higher score) first, then by document and page order
+        chunks.sort(key=lambda x: (-float(x.score or 0.0), x.document_id, x.chunk_number))
 
         logger.info(f"Applied padding: returning {len(chunks)} image chunks (was {len(image_chunks)} image chunks)")
         return chunks
@@ -631,7 +674,7 @@ class DocumentService:
         original_chunk_results: List[ChunkResult],
         final_chunk_results: List[ChunkResult],
         padding: int,
-    ):  #  -> "GroupedChunkResponse"
+    ):  # -> "GroupedChunkResponse"
         """
         Create a grouped response directly from ChunkResult objects.
 
@@ -713,7 +756,7 @@ class DocumentService:
         end_user_id: Optional[str] = None,
         perf_tracker: Optional[Any] = None,
         padding: int = 0,
-    ):  #  -> "GroupedChunkResponse"
+    ):  # -> "GroupedChunkResponse"
         """
         Retrieve chunks with grouped response format that differentiates main chunks from padding.
 
@@ -857,7 +900,8 @@ class DocumentService:
         retrieval_tasks = [self.vector_store.get_chunks_by_id(chunk_identifiers, auth.app_id)]
 
         # Add colpali vector store task if needed
-        if use_colpali and self.colpali_vector_store:
+        settings = get_settings()
+        if use_colpali and settings.ENABLE_COLPALI and self.colpali_vector_store:
             logger.info("Preparing to retrieve chunks from both regular and colpali vector stores")
             retrieval_tasks.append(self.colpali_vector_store.get_chunks_by_id(chunk_identifiers, auth.app_id))
 
@@ -944,6 +988,7 @@ class DocumentService:
         stream_response: Optional[bool] = False,
         llm_config: Optional[Dict[str, Any]] = None,
         padding: int = 0,  # Number of additional chunks to retrieve before and after matched chunks
+        inline_citations: bool = False,  # Whether to include inline citations with filename and page number
     ) -> Union[CompletionResponse, tuple[AsyncGenerator[str, None], List[ChunkSource]]]:
         """Generate completion using relevant chunks as context.
 
@@ -1049,6 +1094,37 @@ class DocumentService:
 
         chunk_contents = [chunk.augmented_content(documents[chunk.document_id]) for chunk in chunks]
 
+        # Collect chunk metadata for inline citations if enabled
+        chunk_metadata = None
+        if inline_citations:
+            chunk_metadata = []
+            for chunk in chunks:
+                # Get the document for this chunk
+                doc = documents.get(chunk.document_id, {})
+                filename = (
+                    chunk.filename or doc.metadata.get("filename", "unknown") if hasattr(doc, "metadata") else "unknown"
+                )
+
+                # Check if this is a ColPali/image chunk
+                is_colpali = chunk.metadata.get("is_image", False)
+
+                metadata = {
+                    "filename": filename,
+                    "chunk_number": chunk.chunk_number,
+                    "document_id": chunk.document_id,
+                    "is_colpali": is_colpali,
+                }
+
+                # For ColPali chunks, chunk_number corresponds to page number (0-indexed)
+                # Add 1 to make it 1-indexed for user display
+                if is_colpali:
+                    metadata["page_number"] = chunk.chunk_number + 1
+                else:
+                    # For regular text chunks, check if page_number is stored in metadata
+                    metadata["page_number"] = chunk.metadata.get("page_number")
+
+                chunk_metadata.append(metadata)
+
         if not perf_tracker:
             phase_times["content_augmentation"] = time.time() - augmentation_start
 
@@ -1086,6 +1162,8 @@ class DocumentService:
             chat_history=chat_history,
             stream_response=stream_response,
             llm_config=llm_config,
+            inline_citations=inline_citations,
+            chunk_metadata=chunk_metadata,
         )
 
         response = await self.completion_model.complete(request)
@@ -1230,7 +1308,9 @@ class DocumentService:
 
         chunk_objects_multivector = []
 
-        if use_colpali and self.colpali_embedding_model:
+        # Check both use_colpali parameter AND global enable_colpali setting
+        settings = get_settings()
+        if use_colpali and settings.ENABLE_COLPALI and self.colpali_embedding_model:
             embeddings_multivector = await self.colpali_embedding_model.embed_for_ingestion(processed_chunks)
             logger.info(f"Generated {len(embeddings_multivector)} embeddings for multivector embedding")
             chunk_objects_multivector = self._create_chunk_objects(
@@ -1254,7 +1334,7 @@ class DocumentService:
         await self._store_chunks_and_doc(
             chunk_objects,
             doc,
-            use_colpali,
+            use_colpali and settings.ENABLE_COLPALI,
             chunk_objects_multivector,
             auth=auth,
         )
@@ -1271,10 +1351,12 @@ class DocumentService:
 
         # Determine the final page count for usage recording
         colpali_count_for_limit_fn = (
-            len(chunk_objects_multivector) if use_colpali and chunk_objects_multivector else None
+            len(chunk_objects_multivector)
+            if use_colpali and settings.ENABLE_COLPALI and chunk_objects_multivector
+            else None
         )
         final_page_count = estimate_pages_by_chars(len(content))
-        if use_colpali and colpali_count_for_limit_fn is not None:
+        if use_colpali and settings.ENABLE_COLPALI and colpali_count_for_limit_fn is not None:
             final_page_count = colpali_count_for_limit_fn
         final_page_count = max(1, final_page_count)  # Ensure minimum of 1 page
         logger.info(f"Determined final page count for ingest_text usage: {final_page_count}")
@@ -1287,7 +1369,7 @@ class DocumentService:
                     "ingest",
                     final_page_count,  # Use the determined final count
                     doc.external_id,
-                    use_colpali=use_colpali,  # Pass colpali status
+                    use_colpali=use_colpali and settings.ENABLE_COLPALI,  # Pass colpali status
                     colpali_chunks_count=colpali_count_for_limit_fn,  # Pass actual colpali count
                 )
             except Exception as rec_exc:
@@ -1485,7 +1567,7 @@ class DocumentService:
 
         return doc
 
-    def img_to_base64_str(self, img: Image):
+    def img_to_base64_str(self, img: PILImage.Image):
         buffered = BytesIO()
         img.save(buffered, format="PNG")
         buffered.seek(0)
@@ -1493,7 +1575,13 @@ class DocumentService:
         img_str = "data:image/png;base64," + base64.b64encode(img_byte).decode()
         return img_str
 
-    def _create_chunks_multivector(self, file_type, file_content_base64: str, file_content: bytes, chunks: List[Chunk]):
+    def _create_chunks_multivector(
+        self,
+        file_type,
+        file_content_base64: Optional[str],
+        file_content: bytes,
+        chunks: List[Chunk],
+    ):
         # Handle the case where file_type is None
         mime_type = file_type.mime if file_type is not None else "text/plain"
         logger.info(f"Creating chunks for multivector embedding for file type {mime_type}")
@@ -1508,6 +1596,8 @@ class DocumentService:
 
                 PILImage.open(BytesIO(file_content)).verify()
                 logger.info("Heuristic image detection succeeded (Pillow). Treating as image.")
+                if file_content_base64 is None:
+                    file_content_base64 = base64.b64encode(file_content).decode()
                 return [Chunk(content=file_content_base64, metadata={"is_image": True})]
             except Exception:
                 logger.info("File type is None and not an image – treating as text")
@@ -1521,8 +1611,6 @@ class DocumentService:
         # it is an image.
         if mime_type.startswith("image/"):
             try:
-                from PIL import Image as PILImage
-
                 img = PILImage.open(BytesIO(file_content))
                 # Resize and compress aggressively to minimize context window footprint
                 max_width = 256  # reduce width to shrink payload dramatically
@@ -1538,16 +1626,53 @@ class DocumentService:
                 return [Chunk(content=img_b64, metadata={"is_image": True})]
             except Exception as e:
                 logger.error(f"Error resizing image for base64 encoding: {e}. Falling back to original size.")
+                if file_content_base64 is None:
+                    file_content_base64 = base64.b64encode(file_content).decode()
                 return [Chunk(content=file_content_base64, metadata={"is_image": True})]
 
         match mime_type:
             case file_type if file_type in IMAGE:
+                if file_content_base64 is None:
+                    file_content_base64 = base64.b64encode(file_content).decode()
                 return [Chunk(content=file_content_base64, metadata={"is_image": True})]
             case "application/pdf":
-                logger.info("Working with PDF file!")
-                images = pdf2image.convert_from_bytes(file_content)
-                images_b64 = [self.img_to_base64_str(image) for image in images]
-                return [Chunk(content=image_b64, metadata={"is_image": True}) for image_b64 in images_b64]
+                logger.info("Working with PDF file - using PyMuPDF for faster processing!")
+
+                try:
+                    # Load PDF document with PyMuPDF (much faster than pdf2image)
+                    pdf_document = fitz.open("pdf", file_content)
+                    images_b64 = []
+
+                    # Process each page individually for better memory management
+                    try:
+                        dpi = int(os.getenv("COLPALI_PDF_DPI", "150"))
+                    except Exception:
+                        dpi = 150
+
+                    for page_num in range(len(pdf_document)):
+                        page = pdf_document[page_num]
+                        mat = fitz.Matrix(dpi / 72, dpi / 72)
+                        pix = page.get_pixmap(matrix=mat)
+                        img_data = pix.tobytes("png")
+
+                        # Convert to PIL Image and then to base64
+                        img = PILImage.open(BytesIO(img_data))
+                        images_b64.append(self.img_to_base64_str(img))
+
+                    pdf_document.close()  # Clean up resources
+
+                    logger.info(f"PyMuPDF processed {len(images_b64)} pages")
+                    return [Chunk(content=image_b64, metadata={"is_image": True}) for image_b64 in images_b64]
+
+                except Exception as e:
+                    # Fallback to pdf2image if PyMuPDF fails
+                    logger.warning(f"PyMuPDF failed ({e}), falling back to pdf2image")
+
+                    images = pdf2image.convert_from_bytes(file_content)
+                    images_b64 = [self.img_to_base64_str(image) for image in images]
+
+                    logger.info(f"pdf2image fallback processed {len(images_b64)} pages")
+                    return [Chunk(content=image_b64, metadata={"is_image": True}) for image_b64 in images_b64]
             case "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/msword":
                 logger.info("Working with Word document!")
                 # Check if file content is empty
@@ -1616,9 +1741,47 @@ class DocumentService:
                         pdf_content = pdf_file.read()
 
                     try:
-                        images = pdf2image.convert_from_bytes(pdf_content)
-                        if not images:
-                            logger.warning("No images extracted from PDF")
+                        # Use PyMuPDF for PDF processing (faster than pdf2image)
+                        try:
+                            pdf_document = fitz.open("pdf", pdf_content)
+                            images_b64 = []
+
+                            # Process each page individually
+                            for page_num in range(len(pdf_document)):
+                                page = pdf_document[page_num]
+                                try:
+                                    dpi = int(os.getenv("COLPALI_PDF_DPI", "150"))
+                                except Exception:
+                                    dpi = 150
+                                mat = fitz.Matrix(dpi / 72, dpi / 72)
+                                pix = page.get_pixmap(matrix=mat)
+                                img_data = pix.tobytes("png")
+
+                                # Convert to PIL Image and then to base64
+                                img = PILImage.open(BytesIO(img_data))
+                                images_b64.append(self.img_to_base64_str(img))
+
+                            pdf_document.close()  # Clean up resources
+
+                        except Exception as pymupdf_error:
+                            # Fallback to pdf2image if PyMuPDF fails
+                            logger.warning(
+                                f"PyMuPDF failed for Word document ({pymupdf_error}), falling back to pdf2image"
+                            )
+                            images = pdf2image.convert_from_bytes(pdf_content)
+                            if not images:
+                                logger.warning("No images extracted from PDF")
+                                return [
+                                    Chunk(
+                                        content=chunk.content,
+                                        metadata=(chunk.metadata | {"is_image": False}),
+                                    )
+                                    for chunk in chunks
+                                ]
+                            images_b64 = [self.img_to_base64_str(image) for image in images]
+
+                        if not images_b64:
+                            logger.warning("No images extracted from Word document PDF")
                             return [
                                 Chunk(
                                     content=chunk.content,
@@ -1627,7 +1790,7 @@ class DocumentService:
                                 for chunk in chunks
                             ]
 
-                        images_b64 = [self.img_to_base64_str(image) for image in images]
+                        logger.info(f"Word document processed {len(images_b64)} pages")
                         return [Chunk(content=image_b64, metadata={"is_image": True}) for image_b64 in images_b64]
                     except Exception as pdf_error:
                         logger.error(f"Error converting PDF to images: {str(pdf_error)}")
@@ -1658,12 +1821,367 @@ class DocumentService:
                     ):
                         os.unlink(expected_pdf_path)
 
-            # case filetype.get_type(ext="txt"):
-            #     logger.info(f"Found text input: chunks for multivector embedding")
-            #     return chunks.copy()
-            # TODO: Add support for office documents
-            # case document.Xls | document.Xlsx | document.Ods |document.Odp:
-            #     logger.warning(f"Colpali is not supported for file type {file_type.mime} - skipping")
+            # PowerPoint presentations
+            case (
+                "application/vnd.ms-powerpoint"
+                | "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                | "application/vnd.openxmlformats-officedocument.presentationml.slideshow"
+            ):
+                logger.info("Working with PowerPoint presentation!")
+
+                # Check if file content is empty
+                if not file_content or len(file_content) == 0:
+                    logger.error("PowerPoint presentation content is empty")
+                    return [
+                        Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                        for chunk in chunks
+                    ]
+
+                # Try to convert to images, but fall back to text if LibreOffice is not available
+                try:
+                    # Check if LibreOffice is available
+                    import shutil
+                    import subprocess
+
+                    if not shutil.which("soffice"):
+                        logger.warning(
+                            "LibreOffice (soffice) not found in PATH. Falling back to text extraction for PowerPoint."
+                        )
+                        logger.info(
+                            "To enable visual PowerPoint processing, install LibreOffice: apt-get install libreoffice"
+                        )
+                        return [
+                            Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                            for chunk in chunks
+                        ]
+
+                    # Determine file extension based on MIME type
+                    if mime_type == "application/vnd.ms-powerpoint":
+                        suffix = ".ppt"
+                    else:
+                        suffix = ".pptx"
+
+                    # Convert PowerPoint to PDF first using LibreOffice
+                    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_ppt:
+                        temp_ppt.write(file_content)
+                        temp_ppt_path = temp_ppt.name
+
+                    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+                        temp_pdf_path = temp_pdf.name
+
+                    try:
+                        # Get the base filename without extension
+                        base_filename = os.path.splitext(os.path.basename(temp_ppt_path))[0]
+                        output_dir = os.path.dirname(temp_pdf_path)
+                        expected_pdf_path = os.path.join(output_dir, f"{base_filename}.pdf")
+
+                        # Convert PowerPoint to PDF with timeout
+                        result = subprocess.run(
+                            [
+                                "soffice",
+                                "--headless",
+                                "--convert-to",
+                                "pdf",
+                                "--outdir",
+                                output_dir,
+                                temp_ppt_path,
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=30,  # 30 second timeout
+                        )
+
+                        if result.returncode != 0:
+                            logger.warning(f"LibreOffice conversion failed for PowerPoint: {result.stderr}")
+                            logger.info("Falling back to text extraction for PowerPoint")
+                            return [
+                                Chunk(
+                                    content=chunk.content,
+                                    metadata=(chunk.metadata | {"is_image": False}),
+                                )
+                                for chunk in chunks
+                            ]
+
+                        # Check if the expected PDF file exists
+                        if not os.path.exists(expected_pdf_path) or os.path.getsize(expected_pdf_path) == 0:
+                            logger.warning(f"Generated PDF is empty or doesn't exist at: {expected_pdf_path}")
+                            logger.info("Falling back to text extraction for PowerPoint")
+                            return [
+                                Chunk(
+                                    content=chunk.content,
+                                    metadata=(chunk.metadata | {"is_image": False}),
+                                )
+                                for chunk in chunks
+                            ]
+
+                        # Now process the PDF
+                        with open(expected_pdf_path, "rb") as pdf_file:
+                            pdf_content = pdf_file.read()
+
+                        try:
+                            # Use PyMuPDF for PDF processing
+                            pdf_document = fitz.open("pdf", pdf_content)
+                            images_b64 = []
+
+                            # Process each slide as an image
+                            for page_num in range(len(pdf_document)):
+                                page = pdf_document[page_num]
+                                try:
+                                    dpi = int(os.getenv("COLPALI_PDF_DPI", "150"))
+                                except Exception:
+                                    dpi = 150
+                                mat = fitz.Matrix(dpi / 72, dpi / 72)
+                                pix = page.get_pixmap(matrix=mat)
+                                img_data = pix.tobytes("png")
+
+                                # Convert to PIL Image and then to base64
+                                img = PILImage.open(BytesIO(img_data))
+                                images_b64.append(self.img_to_base64_str(img))
+
+                            pdf_document.close()
+
+                            logger.info(
+                                f"PowerPoint presentation successfully processed {len(images_b64)} slides as images"
+                            )
+                            return [Chunk(content=image_b64, metadata={"is_image": True}) for image_b64 in images_b64]
+
+                        except Exception as pymupdf_error:
+                            # Fallback to pdf2image if PyMuPDF fails
+                            logger.warning(f"PyMuPDF failed for PowerPoint ({pymupdf_error}), trying pdf2image")
+                            try:
+                                images = pdf2image.convert_from_bytes(pdf_content)
+                                images_b64 = [self.img_to_base64_str(image) for image in images]
+
+                                logger.info(
+                                    f"PowerPoint presentation processed {len(images_b64)} slides with pdf2image"
+                                )
+                                return [
+                                    Chunk(content=image_b64, metadata={"is_image": True}) for image_b64 in images_b64
+                                ]
+                            except Exception as pdf2image_error:
+                                logger.warning(f"pdf2image also failed: {pdf2image_error}")
+                                logger.info("Falling back to text extraction for PowerPoint")
+                                return [
+                                    Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                                    for chunk in chunks
+                                ]
+
+                    except subprocess.TimeoutExpired:
+                        logger.warning("LibreOffice conversion timed out for PowerPoint")
+                        logger.info("Falling back to text extraction")
+                        return [
+                            Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                            for chunk in chunks
+                        ]
+                    except Exception as conversion_error:
+                        logger.warning(f"Error during PowerPoint conversion: {str(conversion_error)}")
+                        logger.info("Falling back to text extraction for PowerPoint")
+                        return [
+                            Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                            for chunk in chunks
+                        ]
+                    finally:
+                        # Clean up temporary files
+                        try:
+                            if "temp_ppt_path" in locals() and os.path.exists(temp_ppt_path):
+                                os.unlink(temp_ppt_path)
+                            if "temp_pdf_path" in locals() and os.path.exists(temp_pdf_path):
+                                os.unlink(temp_pdf_path)
+                            if (
+                                "expected_pdf_path" in locals()
+                                and os.path.exists(expected_pdf_path)
+                                and expected_pdf_path != temp_pdf_path
+                            ):
+                                os.unlink(expected_pdf_path)
+                        except Exception as cleanup_error:
+                            logger.debug(f"Error cleaning up temporary files: {cleanup_error}")
+
+                except Exception as e:
+                    logger.warning(f"Unexpected error processing PowerPoint presentation: {str(e)}")
+                    logger.info("Falling back to text extraction for PowerPoint")
+                    return [
+                        Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                        for chunk in chunks
+                    ]
+
+            # Excel spreadsheets
+            case (
+                "application/vnd.ms-excel"
+                | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                | "application/vnd.ms-excel.sheet.macroEnabled.12"
+            ):
+                logger.info("Working with Excel spreadsheet!")
+
+                # Check if file content is empty
+                if not file_content or len(file_content) == 0:
+                    logger.error("Excel spreadsheet content is empty")
+                    return [
+                        Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                        for chunk in chunks
+                    ]
+
+                # Try to convert to images, but fall back to text if LibreOffice is not available
+                try:
+                    # Check if LibreOffice is available
+                    import shutil
+                    import subprocess
+
+                    if not shutil.which("soffice"):
+                        logger.warning(
+                            "LibreOffice (soffice) not found in PATH. Falling back to text extraction for Excel."
+                        )
+                        logger.info(
+                            "To enable visual Excel processing, install LibreOffice: apt-get install libreoffice"
+                        )
+                        return [
+                            Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                            for chunk in chunks
+                        ]
+
+                    # Determine file extension based on MIME type
+                    if mime_type == "application/vnd.ms-excel":
+                        suffix = ".xls"
+                    else:
+                        suffix = ".xlsx"
+
+                    # Convert Excel to PDF first using LibreOffice
+                    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_excel:
+                        temp_excel.write(file_content)
+                        temp_excel_path = temp_excel.name
+
+                    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+                        temp_pdf_path = temp_pdf.name
+
+                    try:
+                        # Get the base filename without extension
+                        base_filename = os.path.splitext(os.path.basename(temp_excel_path))[0]
+                        output_dir = os.path.dirname(temp_pdf_path)
+                        expected_pdf_path = os.path.join(output_dir, f"{base_filename}.pdf")
+
+                        # Convert Excel to PDF with timeout
+                        result = subprocess.run(
+                            [
+                                "soffice",
+                                "--headless",
+                                "--convert-to",
+                                "pdf",
+                                "--outdir",
+                                output_dir,
+                                temp_excel_path,
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=30,  # 30 second timeout
+                        )
+
+                        if result.returncode != 0:
+                            logger.warning(f"LibreOffice conversion failed for Excel: {result.stderr}")
+                            logger.info("Falling back to text extraction for Excel")
+                            return [
+                                Chunk(
+                                    content=chunk.content,
+                                    metadata=(chunk.metadata | {"is_image": False}),
+                                )
+                                for chunk in chunks
+                            ]
+
+                        # Check if the expected PDF file exists
+                        if not os.path.exists(expected_pdf_path) or os.path.getsize(expected_pdf_path) == 0:
+                            logger.warning(f"Generated PDF is empty or doesn't exist at: {expected_pdf_path}")
+                            logger.info("Falling back to text extraction for Excel")
+                            return [
+                                Chunk(
+                                    content=chunk.content,
+                                    metadata=(chunk.metadata | {"is_image": False}),
+                                )
+                                for chunk in chunks
+                            ]
+
+                        # Now process the PDF
+                        with open(expected_pdf_path, "rb") as pdf_file:
+                            pdf_content = pdf_file.read()
+
+                        try:
+                            # Use PyMuPDF for PDF processing
+                            pdf_document = fitz.open("pdf", pdf_content)
+                            images_b64 = []
+
+                            # Process each page/sheet as an image
+                            for page_num in range(len(pdf_document)):
+                                page = pdf_document[page_num]
+                                try:
+                                    dpi = int(os.getenv("COLPALI_PDF_DPI", "150"))
+                                except Exception:
+                                    dpi = 150
+                                mat = fitz.Matrix(dpi / 72, dpi / 72)
+                                pix = page.get_pixmap(matrix=mat)
+                                img_data = pix.tobytes("png")
+
+                                # Convert to PIL Image and then to base64
+                                img = PILImage.open(BytesIO(img_data))
+                                images_b64.append(self.img_to_base64_str(img))
+
+                            pdf_document.close()
+
+                            logger.info(f"Excel spreadsheet successfully processed {len(images_b64)} pages as images")
+                            return [Chunk(content=image_b64, metadata={"is_image": True}) for image_b64 in images_b64]
+
+                        except Exception as pymupdf_error:
+                            # Fallback to pdf2image if PyMuPDF fails
+                            logger.warning(f"PyMuPDF failed for Excel ({pymupdf_error}), trying pdf2image")
+                            try:
+                                images = pdf2image.convert_from_bytes(pdf_content)
+                                images_b64 = [self.img_to_base64_str(image) for image in images]
+
+                                logger.info(f"Excel spreadsheet processed {len(images_b64)} pages with pdf2image")
+                                return [
+                                    Chunk(content=image_b64, metadata={"is_image": True}) for image_b64 in images_b64
+                                ]
+                            except Exception as pdf2image_error:
+                                logger.warning(f"pdf2image also failed: {pdf2image_error}")
+                                logger.info("Falling back to text extraction for Excel")
+                                return [
+                                    Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                                    for chunk in chunks
+                                ]
+
+                    except subprocess.TimeoutExpired:
+                        logger.warning("LibreOffice conversion timed out for Excel")
+                        logger.info("Falling back to text extraction")
+                        return [
+                            Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                            for chunk in chunks
+                        ]
+                    except Exception as conversion_error:
+                        logger.warning(f"Error during Excel conversion: {str(conversion_error)}")
+                        logger.info("Falling back to text extraction for Excel")
+                        return [
+                            Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                            for chunk in chunks
+                        ]
+                    finally:
+                        # Clean up temporary files
+                        try:
+                            if "temp_excel_path" in locals() and os.path.exists(temp_excel_path):
+                                os.unlink(temp_excel_path)
+                            if "temp_pdf_path" in locals() and os.path.exists(temp_pdf_path):
+                                os.unlink(temp_pdf_path)
+                            if (
+                                "expected_pdf_path" in locals()
+                                and os.path.exists(expected_pdf_path)
+                                and expected_pdf_path != temp_pdf_path
+                            ):
+                                os.unlink(expected_pdf_path)
+                        except Exception as cleanup_error:
+                            logger.debug(f"Error cleaning up temporary files: {cleanup_error}")
+
+                except Exception as e:
+                    logger.warning(f"Unexpected error processing Excel spreadsheet: {str(e)}")
+                    logger.info("Falling back to text extraction for Excel")
+                    return [
+                        Chunk(content=chunk.content, metadata=(chunk.metadata | {"is_image": False}))
+                        for chunk in chunks
+                    ]
             # case file_type if file_type in DOCUMENT:
             #     pass
             case _:
@@ -1677,6 +2195,7 @@ class DocumentService:
         doc_id: str,
         chunks: List[Chunk],
         embeddings: List[List[float]],
+        start_index: int = 0,
     ) -> List[DocumentChunk]:
         """Helper to create chunk objects
 
@@ -1686,7 +2205,7 @@ class DocumentService:
         3. This approach is more efficient as it reduces the size of chunk metadata
         """
         return [
-            c.to_document_chunk(chunk_number=i, embedding=embedding, document_id=doc_id)
+            c.to_document_chunk(chunk_number=start_index + i, embedding=embedding, document_id=doc_id)
             for i, (embedding, c) in enumerate(zip(embeddings, chunks))
         ]
 
@@ -1741,6 +2260,11 @@ class DocumentService:
                         logger.error(f"Error storing {store_name} embeddings: {error_msg}")
                         raise
 
+        # Add using_colpali to document metadata
+        if "using_colpali" not in doc.metadata:
+            doc.metadata["using_colpali"] = use_colpali
+            logger.info(f"Setting using_colpali={use_colpali} in document metadata")
+        
         # Store document metadata with retry
         async def store_document_with_retry():
             attempt = 0
@@ -1803,20 +2327,15 @@ class DocumentService:
                         logger.error(f"Error storing document metadata: {error_msg}")
                         raise
 
-        # Run storage operations in parallel when possible
-        storage_tasks = [store_with_retry(self.vector_store, chunk_objects, "regular")]
-
-        # Add colpali storage task if needed
+        # Store in the appropriate vector store based on use_colpali
         if use_colpali and self.colpali_vector_store and chunk_objects_multivector:
-            storage_tasks.append(store_with_retry(self.colpali_vector_store, chunk_objects_multivector, "colpali"))
+            # Store only in ColPali vector store when ColPali is enabled
+            chunk_ids = await store_with_retry(self.colpali_vector_store, chunk_objects_multivector, "colpali")
+        else:
+            # Store in regular vector store when ColPali is not enabled
+            chunk_ids = await store_with_retry(self.vector_store, chunk_objects, "regular")
 
-        # Execute storage tasks concurrently
-        storage_results = await asyncio.gather(*storage_tasks)
-
-        # Combine chunk IDs
-        regular_chunk_ids = storage_results[0]
-        colpali_chunk_ids = storage_results[1] if len(storage_results) > 1 else []
-        doc.chunk_ids = regular_chunk_ids + colpali_chunk_ids
+        doc.chunk_ids = chunk_ids
 
         logger.debug(f"Stored chunk embeddings in vector stores: {len(doc.chunk_ids)} chunks total")
 
@@ -2406,7 +2925,8 @@ class DocumentService:
         """Process colpali multi-vector embeddings if enabled."""
         chunk_objects_multivector = []
 
-        if not (use_colpali and self.colpali_embedding_model and self.colpali_vector_store):
+        settings = get_settings()
+        if not (use_colpali and settings.ENABLE_COLPALI and self.colpali_embedding_model and self.colpali_vector_store):
             return chunk_objects_multivector
 
         # For file updates, we need special handling for images and PDFs
@@ -2604,6 +3124,70 @@ class DocumentService:
         logger.info(f"Successfully deleted document {document_id} and all associated data")
         return True
 
+    async def extract_pdf_pages(
+        self,
+        bucket: str,
+        key: str,
+        start_page: int,
+        end_page: int,
+    ) -> Dict[str, Any]:
+        """
+        Extract specific pages from a PDF document as base64-encoded images.
+
+        Args:
+            bucket: Storage bucket containing the PDF
+            key: Storage key for the PDF file
+            start_page: Starting page number (1-indexed)
+            end_page: Ending page number (1-indexed)
+
+        Returns:
+            Dict containing:
+                - pages: List of base64-encoded images
+                - total_pages: Total number of pages in the PDF
+        """
+        try:
+            # Download the PDF file from storage
+            file_content = await self.storage.download_file(bucket, key)
+
+            # Open PDF directly from bytes using BytesIO
+            pdf_stream = BytesIO(file_content)
+            pdf_document = fitz.open(stream=pdf_stream, filetype="pdf")
+
+            total_pages = len(pdf_document)
+
+            # Always clamp the page numbers to the total number of pages
+            start_page = max(1, start_page)
+            end_page = min(end_page, total_pages)
+
+            # # Validate page numbers
+            # if start_page < 1 or end_page > total_pages:
+            #     raise ValueError(f"Page range {start_page}-{end_page} is invalid for PDF with {total_pages} pages")
+
+            # Extract pages as images
+            pages_base64 = []
+            for page_num in range(start_page - 1, end_page):  # Convert to 0-indexed
+                page = pdf_document[page_num]
+
+                # Render page as image with high DPI for quality
+                matrix = fitz.Matrix(2.0, 2.0)  # 2x scaling for better quality
+                pix = page.get_pixmap(matrix=matrix)
+
+                # Convert to PIL Image and save as JPEG for smaller size
+                img_data = pix.tobytes("jpeg", jpg_quality=85)  # Use JPEG with good quality
+                img = PILImage.open(BytesIO(img_data))
+
+                # Convert to base64
+                base64_str = self.img_to_base64_str(img)
+                pages_base64.append(base64_str)
+
+            pdf_document.close()
+
+            return {"pages": pages_base64, "total_pages": total_pages}
+
+        except Exception as e:
+            logger.error(f"Error extracting PDF pages from {bucket}/{key}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to extract PDF pages: {str(e)}")
+
     def close(self):
         """Close all resources."""
         # Close any active caches
@@ -2712,5 +3296,46 @@ class DocumentService:
         return await self.graph_service.get_graph_visualization_data(
             graph_name=name,
             auth=auth,
+            system_filters=system_filters,
+        )
+
+    async def search_documents_by_name(
+        self,
+        query: str,
+        auth: AuthContext,
+        limit: int = 10,
+        filters: Optional[Dict[str, Any]] = None,
+        folder_name: Optional[Union[str, List[str]]] = None,
+        end_user_id: Optional[str] = None,
+    ) -> List[Document]:
+        """Search documents by filename using full-text search.
+
+        Args:
+            query: Search query for document names/filenames
+            auth: Authentication context
+            limit: Maximum number of documents to return (1-100)
+            filters: Optional metadata filters
+            folder_name: Optional folder to scope search
+            end_user_id: Optional end-user ID to scope search
+
+        Returns:
+            List of documents matching the search query, ordered by relevance
+        """
+        # Build system filters
+        system_filters = {}
+        if folder_name:
+            system_filters["folder_name"] = folder_name
+        if end_user_id:
+            system_filters["end_user_id"] = end_user_id
+
+        # Clamp limit to reasonable range
+        limit = max(1, min(100, limit))
+
+        # Delegate to database layer
+        return await self.db.search_documents_by_name(
+            query=query,
+            auth=auth,
+            limit=limit,
+            filters=filters,
             system_filters=system_filters,
         )

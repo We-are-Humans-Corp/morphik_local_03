@@ -83,8 +83,8 @@ class PerformanceTracker:
             self.current_phase = None
             self.phase_start = None
 
-    def add_suboperation(self, name: str, duration: float):
-        """Add a sub-operation timing"""
+    def add_suboperation(self, name: str, duration: float, parent_phase: str = None):
+        """Add a sub-operation timing that will be displayed under its parent phase"""
         self.phases[name] = duration
 
     def log_summary(self, additional_info: str = ""):
@@ -674,14 +674,18 @@ async def query_completion(
 
         # Process llm_config if provided
         llm_config = request.llm_config
+        logger.info(f"Request llm_config: {llm_config}")
         if llm_config and "model" in llm_config:
             model_key = llm_config["model"]
+            logger.info(f"Model key from request: {model_key}")
             # Check if this is a registered model key (like "claude_opus")
             if model_key in settings.REGISTERED_MODELS:
                 # Map to the full model name from configuration
                 model_config = settings.REGISTERED_MODELS[model_key]
                 llm_config["model"] = model_config.get("model_name", model_key)
                 logger.info(f"Mapped model key '{model_key}' to '{llm_config['model']}'")
+            else:
+                logger.info(f"Model key '{model_key}' not in REGISTERED_MODELS, using as is")
             
             # If API key is not provided in llm_config, try to get it from database
             if "api_key" not in llm_config and auth.user_id and auth.app_id:
@@ -1396,6 +1400,12 @@ async def update_document_file(
     try:
         metadata_dict = json.loads(metadata)
         rules_list = json.loads(rules)
+
+        # Auto-enable ColPali for PDF files when ENABLE_COLPALI is true
+        if use_colpali is None and settings.ENABLE_COLPALI:
+            if file.filename and file.filename.lower().endswith('.pdf'):
+                use_colpali = True
+                logger.info(f"Auto-enabled ColPali for PDF file: {file.filename}")
 
         doc = await document_service.update_document(
             document_id=document_id,

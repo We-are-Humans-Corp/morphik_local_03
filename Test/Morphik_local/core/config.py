@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     SESSION_SECRET_KEY: str
     POSTGRES_URI: Optional[str] = None
     UNSTRUCTURED_API_KEY: Optional[str] = None
-    AWS_ACCESS_KEY: Optional[str] = None
+    AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
@@ -128,7 +128,7 @@ class Settings(BaseSettings):
     # Colpali configuration
     ENABLE_COLPALI: bool
     # Colpali embedding mode: off, local, or api
-    COLPALI_MODE: Literal["off", "local", "api"] = "local"
+    COLPALI_MODE: Literal["off", "local", "api"] = "api"
 
     # Mode configuration
     MODE: Literal["cloud", "self_hosted"] = "cloud"
@@ -300,12 +300,12 @@ def get_settings() -> Settings:
     match storage_config["STORAGE_PROVIDER"]:
         case "local":
             storage_config.update({"STORAGE_PATH": config["storage"]["storage_path"]})
-        case "aws-s3" if all(key in os.environ for key in ["AWS_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"]):
+        case "aws-s3" if all(key in os.environ for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]):
             storage_config.update(
                 {
                     "AWS_REGION": config["storage"]["region"],
                     "S3_BUCKET": config["storage"]["bucket_name"],
-                    "AWS_ACCESS_KEY": os.environ["AWS_ACCESS_KEY"],
+                    "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
                     "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_ACCESS_KEY"],
                 }
             )

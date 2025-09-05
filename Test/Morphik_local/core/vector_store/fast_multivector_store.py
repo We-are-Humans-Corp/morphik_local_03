@@ -70,7 +70,7 @@ class FastMultiVectorStore(BaseVectorStore):
             case "aws-s3":
                 logger.info("Initializing S3 storage for multi-vector chunks")
                 return S3Storage(
-                    aws_access_key=settings.AWS_ACCESS_KEY,
+                    aws_access_key=settings.AWS_ACCESS_KEY_ID,
                     aws_secret_key=settings.AWS_SECRET_ACCESS_KEY,
                     region_name=settings.AWS_REGION,
                     default_bucket=MULTIVECTOR_CHUNKS_BUCKET,
@@ -375,7 +375,7 @@ class FastMultiVectorStore(BaseVectorStore):
 
     async def _save_chunk_to_storage(self, chunk: DocumentChunk, app_id: Optional[str] = None):
         return await self._store_content_externally(
-            chunk.content, chunk.document_id, chunk.chunk_number, str(chunk.metadata), app_id
+            chunk.content, chunk.document_id, chunk.chunk_number, json.dumps(chunk.metadata), app_id
         )
 
     def _is_storage_key(self, content: str) -> bool:
@@ -419,12 +419,33 @@ class FastMultiVectorStore(BaseVectorStore):
 
             logger.info(f"Downloaded {len(content_bytes)} bytes for key: {storage_key}")
 
-            # Check if storage key ends with .txt (indicates content was stored as text)
+            # Check metadata first to determine content type
+            is_image = False
+            if chunk_metadata:
+                try:
+                    metadata = json.loads(chunk_metadata)
+                    is_image = metadata.get("is_image", False)
+                    logger.info(f"Chunk metadata indicates is_image: {is_image}")
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.warning(f"Error parsing metadata: {e}")
+            
+            # For .txt files, check if it's actually image data stored as base64
             if storage_key.endswith(".txt"):
-                # Content is stored as text (could be base64 string for images)
-                result = content_bytes.decode("utf-8")
-                logger.info(f"Retrieved text content from .txt file, length: {len(result)}")
-                return result
+                # Content is stored as text
+                content_str = content_bytes.decode("utf-8")
+                logger.info(f"Retrieved content from .txt file, length: {len(content_str)}")
+                
+                # If metadata says it's an image, the content should be base64
+                if is_image:
+                    # The content is already base64 encoded image data
+                    # Return it with data URI prefix for proper display
+                    if not content_str.startswith("data:"):
+                        content_str = f"data:image/jpeg;base64,{content_str}"
+                    logger.info(f"Returning image content with data URI, length: {len(content_str)}")
+                    return content_str
+                else:
+                    # Regular text content
+                    return content_str
 
             # For non-.txt files, determine content type
             try:
