@@ -64,10 +64,10 @@ match settings.STORAGE_PROVIDER:
     case "local":
         storage = LocalStorage(storage_path=settings.STORAGE_PATH)
     case "aws-s3":
-        if not settings.AWS_ACCESS_KEY or not settings.AWS_SECRET_ACCESS_KEY:
+        if not settings.AWS_ACCESS_KEY_ID or not settings.AWS_SECRET_ACCESS_KEY:
             raise ValueError("AWS credentials are required for S3 storage")
         storage = S3Storage(
-            aws_access_key=settings.AWS_ACCESS_KEY,
+            aws_access_key=settings.AWS_ACCESS_KEY_ID,
             aws_secret_key=settings.AWS_SECRET_ACCESS_KEY,
             region_name=settings.AWS_REGION,
             default_bucket=settings.S3_BUCKET,

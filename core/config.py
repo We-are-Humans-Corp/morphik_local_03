@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     SESSION_SECRET_KEY: str
     POSTGRES_URI: Optional[str] = None
     UNSTRUCTURED_API_KEY: Optional[str] = None
-    AWS_ACCESS_KEY: Optional[str] = None
+    AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
@@ -304,12 +304,12 @@ def get_settings() -> Settings:
     match settings_dict["STORAGE_PROVIDER"]:
         case "local":
             settings_dict["STORAGE_PATH"] = config["storage"]["storage_path"]
-        case "aws-s3" if all(key in os.environ for key in ["AWS_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"]):
+        case "aws-s3" if all(key in os.environ for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]):
             settings_dict.update(
                 {
                     "AWS_REGION": config["storage"]["region"],
                     "S3_BUCKET": config["storage"]["bucket_name"],
-                    "AWS_ACCESS_KEY": os.environ["AWS_ACCESS_KEY"],
+                    "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
                     "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_ACCESS_KEY"],
                 }
             )

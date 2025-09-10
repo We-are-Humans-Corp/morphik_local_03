@@ -70,7 +70,7 @@ class FastMultiVectorStore(BaseVectorStore):
             case "aws-s3":
                 logger.info("Initializing S3 storage for multi-vector chunks")
                 return S3Storage(
-                    aws_access_key=settings.AWS_ACCESS_KEY,
+                    aws_access_key=settings.AWS_ACCESS_KEY_ID,
                     aws_secret_key=settings.AWS_SECRET_ACCESS_KEY,
                     region_name=settings.AWS_REGION,
                     default_bucket=MULTIVECTOR_CHUNKS_BUCKET,

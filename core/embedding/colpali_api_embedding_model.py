@@ -80,9 +80,17 @@ class ColpaliApiEmbeddingModel(BaseEmbeddingModel):
         headers = {"Authorization": f"Bearer {self.api_key}"}
         payload = {"input_type": input_type, "inputs": inputs}
         timeout = Timeout(read=6000.0, connect=6000.0, write=6000.0, pool=6000.0)
+
+        # DEBUG: Добавлено логирование
+        logger.info(f"🚀 Calling Modal API: {self.endpoint}")
+        logger.info(f"📤 Payload: input_type={input_type}, inputs_count={len(inputs)}")
         async with AsyncClient(timeout=timeout) as client:
             resp = await client.post(self.endpoint, json=payload, headers=headers)
             resp.raise_for_status()
+
+        # DEBUG: Логирование ответа
+        logger.info(f"📥 Response status: {resp.status_code}")
+        logger.info(f"📥 Response size: {len(resp.content)} bytes")
 
             # Load .npz from response content
             npz_data = np.load(io.BytesIO(resp.content))

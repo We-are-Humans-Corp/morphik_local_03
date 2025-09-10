@@ -1,0 +1,5 @@
+You're working on Morphik - an end-to-end RAG system that is being used to power internal search.
+
+The frotend code for Morphik can be found in the `ee/ui-component` folder. The frontend code is written in typescript and Next.js. Components from ShadCN UI are used where possible.
+
+The backend code for Morphik can be found everywhere else, and is written in python. We follow the google python style guide.
