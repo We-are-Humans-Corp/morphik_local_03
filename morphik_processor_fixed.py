@@ -139,11 +139,12 @@ async def process_colpali(request: Dict[str, Any]) -> Dict[str, Any]:
             cache_dir="/models"
         ).eval()
         
-        # FIXED: Initialize processor WITHOUT max_length and truncation
+        # FIXED: Initialize processor with proper max_length for image tokens
         processor = AutoProcessor.from_pretrained(
             "vidore/colpali-v1.2",
-            cache_dir="/models"
-            # NO max_length or truncation parameters!
+            cache_dir="/models",
+            max_length=2048,  # Increased to handle 1024 image tokens + text
+            truncation=False  # Disable truncation to avoid token mismatch
         )
         
         # Process input
