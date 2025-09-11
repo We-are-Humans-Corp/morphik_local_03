@@ -189,22 +189,34 @@ async def process_colpali(request: Dict[str, Any]) -> Dict[str, Any]:
                     )
                     cur = conn.cursor()
                     
-                    # Insert into multi_vector_embeddings
+                    # Binary quantization for PostgreSQL BIT(128)[] format
+                    # CRITICAL: Convert embeddings to binary format, NOT JSON!
+                    embeddings_np = embeddings.cpu().numpy()
+                    
+                    # For now, skip embeddings column since it requires special BIT format
+                    # Store embeddings in chunk_metadata temporarily
+                    chunk_metadata = {
+                        "model": "colpali-v1.2", 
+                        "shape": list(embeddings.shape),
+                        "is_image": True,  # Mark as image for ColPali
+                        "timestamp": datetime.now().isoformat(),
+                        "embeddings_json": embeddings_list  # Temporary storage in metadata
+                    }
+                    
+                    # Insert without embeddings column for now
                     cur.execute("""
                         INSERT INTO multi_vector_embeddings 
-                        (document_id, chunk_id, embedding, model, metadata)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT (document_id, chunk_id) 
+                        (document_id, chunk_number, content, chunk_metadata)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (document_id, chunk_number) 
                         DO UPDATE SET 
-                            embedding = EXCLUDED.embedding,
-                            model = EXCLUDED.model,
-                            metadata = EXCLUDED.metadata
+                            content = EXCLUDED.content,
+                            chunk_metadata = EXCLUDED.chunk_metadata
                     """, (
                         request.get("document_id"),
-                        request.get("chunk_id"),
-                        json.dumps(embeddings_list),
-                        "colpali-v1.2",
-                        json.dumps({"shape": list(embeddings.shape)})
+                        int(request.get("chunk_id", 0)),  # Convert chunk_id to integer for chunk_number
+                        request.get("content", ""),  # Base64 image content or text  
+                        json.dumps(chunk_metadata)  # Metadata with embeddings temporarily
                     ))
                     
                     conn.commit()
