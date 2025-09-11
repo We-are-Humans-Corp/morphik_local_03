@@ -158,7 +158,17 @@ async def process_colpali(request: Dict[str, Any]) -> Dict[str, Any]:
             
             # Decode base64 image
             image_bytes = base64.b64decode(image_data)
-            image = Image.open(BytesIO(image_bytes)).convert("RGB")
+            image = Image.open(BytesIO(image_bytes))
+            
+            # CRITICAL: Ensure image is RGB and has minimum size
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            
+            # Ensure minimum size to avoid processing errors
+            if image.size[0] < 224 or image.size[1] < 224:
+                # Resize to minimum required size
+                new_size = (max(224, image.size[0]), max(224, image.size[1]))
+                image = image.resize(new_size, Image.Resampling.LANCZOS)
             
             # Process with ColPali
             inputs = processor(images=image, return_tensors="pt").to(device)
