@@ -175,8 +175,8 @@ async def process_colpali(request: Dict[str, Any]) -> Dict[str, Any]:
             inputs = processor(images=image, return_tensors="pt").to(device)
             
             with torch.no_grad():
-                outputs = model(**inputs)
-                embeddings = outputs.last_hidden_state.mean(dim=1)
+                outputs = model(**inputs)  # ColPali returns tensor directly
+                embeddings = outputs.mean(dim=1)  # Average over tokens dimension
             
             # Save to PostgreSQL if document_id and chunk_id provided
             embeddings_list = embeddings.cpu().numpy().tolist()
@@ -290,8 +290,8 @@ async def process_colpali(request: Dict[str, Any]) -> Dict[str, Any]:
                 inputs = processor(images=image_rgb, return_tensors="pt").to(device)
                 
                 with torch.no_grad():
-                    outputs = model(**inputs)
-                    page_embeddings = outputs.last_hidden_state.mean(dim=1)
+                    outputs = model(**inputs)  # ColPali returns tensor directly
+                    page_embeddings = outputs.mean(dim=1)  # Average over tokens dimension
                     all_embeddings.append({
                         "page": page_num + 1,
                         "embeddings": page_embeddings.cpu().numpy().tolist()
