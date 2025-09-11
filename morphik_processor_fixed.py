@@ -170,7 +170,17 @@ async def process_colpali(request: Dict[str, Any]) -> Dict[str, Any]:
             # Save to PostgreSQL if document_id and chunk_id provided
             embeddings_list = embeddings.cpu().numpy().tolist()
             
-            if request.get("document_id") and request.get("chunk_id"):
+            # Log what we received
+            print(f"Request keys: {list(request.keys())}")
+            print(f"document_id: {request.get('document_id')}")
+            print(f"chunk_ids: {request.get('chunk_ids')}")
+            
+            # Handle both chunk_id (single) and chunk_ids (array) for compatibility
+            chunk_ids = request.get("chunk_ids", [])
+            if not chunk_ids and request.get("chunk_id") is not None:
+                chunk_ids = [request.get("chunk_id")]
+            
+            if request.get("document_id") and chunk_ids:
                 try:
                     # Get PostgreSQL URL from environment
                     postgres_url = os.environ.get("HETZNER_POSTGRES_URL", 
@@ -203,21 +213,34 @@ async def process_colpali(request: Dict[str, Any]) -> Dict[str, Any]:
                         "embeddings_json": embeddings_list  # Temporary storage in metadata
                     }
                     
-                    # Insert without embeddings column for now
-                    cur.execute("""
-                        INSERT INTO multi_vector_embeddings 
-                        (document_id, chunk_number, content, chunk_metadata)
-                        VALUES (%s, %s, %s, %s)
-                        ON CONFLICT (document_id, chunk_number) 
-                        DO UPDATE SET 
-                            content = EXCLUDED.content,
-                            chunk_metadata = EXCLUDED.chunk_metadata
-                    """, (
-                        request.get("document_id"),
-                        int(request.get("chunk_id", 0)),  # Convert chunk_id to integer for chunk_number
-                        request.get("content", ""),  # Base64 image content or text  
-                        json.dumps(chunk_metadata)  # Metadata with embeddings temporarily
-                    ))
+                    # Process each chunk_id in the array
+                    document_id = request.get("document_id")
+                    content = request.get("content", "")
+                    
+                    # If we have multiple inputs, process them with corresponding chunk_ids
+                    inputs_list = request.get("inputs", [])
+                    
+                    for idx, chunk_id in enumerate(chunk_ids):
+                        # Get the specific content for this chunk if available
+                        chunk_content = inputs_list[idx] if idx < len(inputs_list) else content
+                        
+                        # Insert without embeddings column for now
+                        cur.execute("""
+                            INSERT INTO multi_vector_embeddings 
+                            (document_id, chunk_number, content, chunk_metadata)
+                            VALUES (%s, %s, %s, %s)
+                            ON CONFLICT (document_id, chunk_number) 
+                            DO UPDATE SET 
+                                content = EXCLUDED.content,
+                                chunk_metadata = EXCLUDED.chunk_metadata
+                        """, (
+                            document_id,
+                            int(chunk_id),  # Convert chunk_id to integer for chunk_number
+                            f"data:image/png;base64,{chunk_content}" if chunk_content and not chunk_content.startswith("data:") else chunk_content,
+                            json.dumps(chunk_metadata)  # Metadata with embeddings temporarily
+                        ))
+                        
+                        print(f"Saved chunk {chunk_id} for document {document_id}")
                     
                     conn.commit()
                     cur.close()
@@ -233,7 +256,7 @@ async def process_colpali(request: Dict[str, Any]) -> Dict[str, Any]:
                 "embeddings": embeddings_list,
                 "shape": list(embeddings.shape),
                 "model": "colpali-v1.2",
-                "saved_to_db": bool(request.get("document_id") and request.get("chunk_id"))
+                "saved_to_db": bool(request.get("document_id") and chunk_ids)
             }
             
         elif document_type == "pdf":
