@@ -793,8 +793,10 @@ async def process_ingestion_job(
                     end_idx = min(start_idx + store_batch_size, total)
                     batch_chunks = processed_chunks_multivector[start_idx:end_idx]
 
-                    # Embed this batch
-                    batch_embeddings = await document_service.colpali_embedding_model.embed_for_ingestion(batch_chunks)
+                    # Embed this batch with document_id and start_index
+                    batch_embeddings = await document_service.colpali_embedding_model.embed_for_ingestion(
+                        batch_chunks, document_id=doc.external_id, start_index=start_idx
+                    )
                     logger.debug(
                         f"ColPali batch embedded [{start_idx}:{end_idx}] -> {len(batch_embeddings)} embeddings"
                     )

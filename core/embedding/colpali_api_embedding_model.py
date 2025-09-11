@@ -1,6 +1,6 @@
 import io
 import logging
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from httpx import AsyncClient, Timeout  # replacing httpx.AsyncClient for clarity
@@ -42,7 +42,7 @@ class ColpaliApiEmbeddingModel(BaseEmbeddingModel):
         # Batching is handled at a higher layer (streaming embed+store).
         # Here we issue at most one request per input type per batch.
 
-    async def embed_for_ingestion(self, chunks: Union[Chunk, List[Chunk]]) -> List[MultiVector]:
+    async def embed_for_ingestion(self, chunks: Union[Chunk, List[Chunk]], document_id: Optional[str] = None, start_index: int = 0) -> List[MultiVector]:
         # Normalize to list
         if isinstance(chunks, Chunk):
             chunks = [chunks]
@@ -56,14 +56,18 @@ class ColpaliApiEmbeddingModel(BaseEmbeddingModel):
         # Image embeddings
         if image_inputs:
             indices, inputs = zip(*image_inputs)
-            data = await self.call_api(list(inputs), "image")
+            # Calculate chunk_ids for this batch
+            chunk_ids = [start_index + idx for idx in indices] if document_id else None
+            data = await self.call_api(list(inputs), "image", document_id=document_id, chunk_ids=chunk_ids)
             for idx, emb in zip(indices, data):
                 results[idx] = emb
 
         # Text embeddings
         if text_inputs:
             indices, inputs = zip(*text_inputs)
-            data = await self.call_api(list(inputs), "text")
+            # Calculate chunk_ids for this batch
+            chunk_ids = [start_index + idx for idx in indices] if document_id else None
+            data = await self.call_api(list(inputs), "text", document_id=document_id, chunk_ids=chunk_ids)
             for idx, emb in zip(indices, data):
                 results[idx] = emb
 
@@ -76,14 +80,21 @@ class ColpaliApiEmbeddingModel(BaseEmbeddingModel):
             raise RuntimeError("No embeddings returned from Morphik Embedding API")
         return data[0]
 
-    async def call_api(self, inputs, input_type) -> List[MultiVector]:
+    async def call_api(self, inputs, input_type, document_id=None, chunk_ids=None) -> List[MultiVector]:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         payload = {"input_type": input_type, "inputs": inputs}
+        
+        # Add document_id and chunk_ids if provided
+        if document_id:
+            payload["document_id"] = document_id
+        if chunk_ids is not None:
+            payload["chunk_ids"] = chunk_ids
+            
         timeout = Timeout(read=6000.0, connect=6000.0, write=6000.0, pool=6000.0)
 
         # DEBUG: Добавлено логирование
         logger.info(f"🚀 Calling Modal API: {self.endpoint}")
-        logger.info(f"📤 Payload: input_type={input_type}, inputs_count={len(inputs)}")
+        logger.info(f"📤 Payload: input_type={input_type}, inputs_count={len(inputs)}, document_id={document_id}, chunk_ids={chunk_ids}")
         async with AsyncClient(timeout=timeout) as client:
             resp = await client.post(self.endpoint, json=payload, headers=headers)
             resp.raise_for_status()
