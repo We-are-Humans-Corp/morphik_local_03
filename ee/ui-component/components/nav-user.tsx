@@ -78,11 +78,14 @@ export function NavUser({ user, onLogout, onProfileNavigate }: NavUserProps) {
           <SidebarMenuButton
             onClick={e => {
               e.preventDefault();
-              if (onLogout) {
-                onLogout();
-              } else {
-                console.warn("No logout handler provided");
+              // Clear localStorage
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("morphik-auth-token");
+                localStorage.removeItem("morphik-user-profile");
+                localStorage.removeItem("morphik-connection-uri");
               }
+              // Redirect to auth service
+              window.location.href = "http://localhost:8000/login";
             }}
           >
             <IconLogout className="h-5 w-5" />
