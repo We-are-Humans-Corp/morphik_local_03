@@ -45,42 +45,60 @@ Morphik v2.0 - это распределенная система обработ
 
 ### Трехуровневая архитектура
 
-```
+``` Реальная архитектура: UI локально, API на сервере с JWT auth и умной обработкой документов
+
 ┌─────────────────────────────────────────────────────────────┐
 │                     ЛОКАЛЬНАЯ МАШИНА                         │
 ├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   UI (React) │  │ API (FastAPI)│  │Worker (Arq)  │      │
-│  │ Port: 3000   │◄─┤ Port: 8000   │◄─┤ Background   │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────┬────────────────┬─────────────────┘
-                         │                │
-                         ▼                ▼
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │   UI (React/Next.js) - Docker контейнер              │   │
+│  │   Port: 3000                                         │   │
+│  │   • Login/Register с реальной JWT аутентификацией    │   │
+│  │   • Отправляет запросы на 135.181.106.12:8000       │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────┬────────────────────────────────────┘
+                         │ HTTP с JWT токеном
+                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  MODAL.COM GPU CLOUD                         │
+│              HETZNER SERVER (135.181.106.12)                 │
+├─────────────────────────────────────────────────────────────┤
+│  ┌────────────────────────────────────────────────────┐     │
+│  │ API (FastAPI) - Docker контейнер                   │     │
+│  │ Port: 8000                                         │     │
+│  │ • JWT токены с реальным user_id из БД             │     │
+│  │ • Умная логика обработки документов:              │     │
+│  │   - Текст (txt/md) → MorphikParser + Ollama       │     │
+│  │   - Визуал (pdf/img) → ColPali через Modal.com    │     │
+│  │ • Cross-domain CORS для localhost:3000            │     │
+│  └────────────────────────────────────────────────────┘     │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │  PostgreSQL  │  │Worker (Arq)  │  │    Redis     │      │
+│  │  Port: 5432  │  │ Background   │  │  Port: 6379  │      │
+│  │  • users     │  │ Processing   │  │  Cache/Queue │      │
+│  │  • documents │  └──────────────┘  └──────────────┘      │
+│  │  • embeddings│                                           │
+│  └──────────────┘                                           │
+│  ┌──────────────┐  ┌──────────────────────────────┐        │
+│  │   Ollama     │  │        MinIO S3                │        │
+│  │ Port: 11434  │  │      Port: 32000               │        │
+│  │ • llama3.2   │  │   • morphik-storage bucket     │        │
+│  │ • nomic-embed│  └──────────────────────────────┘        │
+│  └──────────────┘                                           │
+└─────────────────────────┬────────────────────────────────────┘
+                         │ API calls (только для визуальных документов)
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  MODAL.COM GPU CLOUD                        │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌────────────────────────────────────────────────────┐     │
 │  │  ColPali Processor (A100-40GB)                     │     │
 │  │  • Endpoint: rugusev--morphik-processor-*          │     │
 │  │  • Model: vidore/colpali-v1.2                      │     │
-│  │  • Direct PostgreSQL writes                        │     │
+│  │  • Обрабатывает ТОЛЬКО изображения и PDF           │     │
+│  │  • Direct PostgreSQL writes to Hetzner             │     │
 │  │  • BFloat16 → Float32 conversion                   │     │
 │  └────────────────────────────────────────────────────┘     │
-└─────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│              HETZNER SERVER (135.181.106.12)                 │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ PostgreSQL   │  │    Redis     │  │   Ollama     │      │
-│  │ Port: 5432   │  │ Port: 6379   │  │ Port: 11434  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│  ┌──────────────┐  ┌──────────────────────────────┐        │
-│  │    MinIO     │  │ multi_vector_embeddings table │        │
-│  │ Port: 32000  │  │ • Base64 images              │        │
-│  └──────────────┘  │ • ColPali embeddings         │        │
-│                    └──────────────────────────────┘        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -231,10 +249,11 @@ sequenceDiagram
 
 ```
 /Users/fedor/PycharmProjects/PythonProject/Morphik_local/
-├── modal-morphik_test/         # Основная рабочая директория
+├── hetzner-morphik/            # Полная копия с сервера (Backend + все сервисы)
 │   ├── core/                   # Backend API
 │   │   ├── api.py             # FastAPI application
 │   │   ├── routes/            # API endpoints
+│   │   │   └── auth.py       # JWT аутентификация
 │   │   ├── services/          # Бизнес-логика
 │   │   ├── models/            # SQLAlchemy модели
 │   │   ├── embedding/         # Embedding провайдеры
@@ -243,21 +262,30 @@ sequenceDiagram
 │   │   │   └── ingestion_worker.py  # Document processing
 │   │   └── database/          # Database layer
 │   │
-│   ├── ee/ui-component/        # Frontend
+│   ├── ee/ui-component/        # UI компоненты (копия для reference)
+│   ├── docker-compose.yml     # Docker конфигурация сервера
+│   ├── morphik.toml          # Основная конфигурация
+│   └── .env                  # Environment переменные
+│
+├── morphik-ui/                 # Локальный UI в Docker
+│   ├── ee/ui-component/        # Frontend React/Next.js
 │   │   ├── app/               # Next.js app router
 │   │   ├── components/        # React components
 │   │   └── lib/              # Utilities
 │   │
-│   ├── docker-compose.yml     # Docker конфигурация
-│   ├── morphik.toml          # Основная конфигурация
-│   └── .env                  # Environment переменные
+│   ├── docker-compose.yml     # Docker для UI
+│   ├── docker-compose.override.yml  # Локальные override настройки
+│   ├── dockerfile.ui          # Dockerfile для UI образа
+│   └── .env                  # UI конфигурация
 │
-├── morphik_processor_fixed.py  # Modal.com deployment
+├── modal-morphik_test/         # Modal.com тесты и разработка
+│   └── morphik_processor_fixed.py  # ColPali GPU processor
+│
 ├── README/                     # Документация
 │   ├── COMPLETE_DOCUMENTATION_v2.0.md  # Этот файл
 │   └── COLPALI_COMPLETE_SETUP.md      # ColPali детали
 │
-└── test_*.py                  # Тестовые скрипты
+└── .env                       # Основная конфигурация
 ```
 
 ---

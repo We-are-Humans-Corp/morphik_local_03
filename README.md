@@ -1,16 +1,16 @@
-# 🚀 Morphik v2.0 - AI-Powered Document Intelligence Platform
+# AI-Powered Document Intelligence Platform
 
 [![Version](https://img.shields.io/badge/version-2.0-blue.svg)](https://github.com/We-are-Humans-Corp/Morphik_local)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://www.docker.com/)
 [![Modal](https://img.shields.io/badge/GPU-Modal.com-purple.svg)](https://modal.com)
 
-AI-native platform for processing visually rich documents with multimodal understanding. Powered by ColPali on Modal.com GPU infrastructure.
+AI-native platform for processing visually rich documents with multimodal understanding. 
 
 
 ## 🎯 Зачем нужна эта система
 
-### Проблемы, которые решает Morphik v2.0
+### Проблемы, которые решает 
 
 1. **Визуальное понимание документов**
    - Традиционные RAG системы теряют 60% информации из PDF (графики, таблицы, диаграммы)
@@ -45,10 +45,33 @@ AI-native platform for processing visually rich documents with multimodal unders
 
 ## 🏗️ Архитектура
 
-**Трехуровневая система:**
-- 🖥️ **Локально**: UI (React), API (FastAPI), Worker - порты 3000, 8000
-- ☁️ **Modal.com**: ColPali GPU обработка на A100
-- 🗄️ **Hetzner**: PostgreSQL, Redis, Ollama - сервер 135.181.106.12
+**Распределенная трехуровневая система с умной обработкой документов:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  ЛОКАЛЬНАЯ МАШИНА                            │
+│   UI (React/Next.js) - Docker на порту 3000                 │
+│   → Отправляет запросы с JWT токеном на сервер              │
+└─────────────────────────┬────────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│           HETZNER SERVER (135.181.106.12)                    │
+│   • API (FastAPI) - порт 8000 с JWT аутентификацией         │
+│   • Умная обработка: текст → Ollama, визуал → ColPali       │
+│   • PostgreSQL, Redis, Ollama, MinIO, Worker                │
+└─────────────────────────┬────────────────────────────────────┘
+                         ↓ (только для PDF/изображений)
+┌─────────────────────────────────────────────────────────────┐
+│              MODAL.COM GPU CLOUD                             │
+│   ColPali v1.2 на A100 для визуального понимания документов │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Ключевые особенности:**
+- ✅ JWT токены с реальным user_id из базы данных
+- ✅ Умная логика выбора обработчика по типу документа
+- ✅ Cross-domain CORS для безопасного соединения
+- ✅ GPU используется только когда нужно (экономия 90%)
 
 [Подробная архитектура →](./README/COMPLETE_DOCUMENTATION_v2.0.md#архитектура-v20)
 
@@ -64,45 +87,63 @@ AI-native platform for processing visually rich documents with multimodal unders
 ```bash
 # 1. Clone repository
 git clone https://github.com/We-are-Humans-Corp/Morphik_local.git
-cd Morphik_local/modal-morphik_test
+cd Morphik_local
 
 # 2. Configure environment
-cp .env.example .env
-# Edit .env with your API keys
+cp hetzner-morphik/.env.example .env
+# Edit .env with your API keys and server credentials
 
-# 3. Start services
+# 3. Start local UI
+cd morphik-ui
 docker-compose up -d
 
-# 4. Deploy Modal GPU function
-modal deploy morphik_processor_fixed.py
+# 4. Connect to server (API already running)
+# Server API: http://135.181.106.12:8000
+# UI will connect automatically
 
 # 5. Access UI
 open http://localhost:3000
 ```
 
+**Note:** API и все сервисы уже запущены на сервере Hetzner (135.181.106.12)
+
 ### Default Credentials
 - **Username**: `demotest`
-- **Password**: `demo`
-- **API Docs**: http://localhost:8000/docs
+- **Password**: `demo123` 
+- **API Docs**: http://135.181.106.12:8000/docs
+- **Server**: 135.181.106.12 (Hetzner)
+
+**Важно:** Система использует JWT токены с реальной аутентификацией
 
 ## 📊 Services & Ports
 
 | Service | Port | Location | Description |
 |---------|------|----------|-------------|
-| **UI** | 3000 | Local Docker | Next.js 15 frontend |
-| **API** | 8000 | Local Docker | FastAPI backend |
-| **PostgreSQL** | 5432 | Hetzner | Database + pgvector |
-| **Redis** | 6379 | Hetzner | Queue & cache |
-| **Ollama** | 11434 | Hetzner | Local LLM models |
-| **MinIO** | 32000 | Hetzner | S3-compatible storage |
-| **ColPali** | HTTPS | Modal.com | GPU processing |
+| **UI** | 3000 | Local Docker | Next.js 15 frontend с JWT auth |
+| **API** | 8000 | Hetzner Server | FastAPI с умной обработкой документов |
+| **Worker** | - | Hetzner Server | Arq background processing |
+| **PostgreSQL** | 5432 | Hetzner Server | Database + pgvector + user auth |
+| **Redis** | 6379 | Hetzner Server | Queue & cache |
+| **Ollama** | 11434 | Hetzner Server | llama3.2 + nomic-embed для текста |
+| **MinIO** | 32000 | Hetzner Server | S3-compatible storage |
+| **ColPali** | HTTPS | Modal.com | GPU A100 для визуальных документов |
 
 ## 🔧 Конфигурация
 
-Основные файлы:
+### Структура проекта:
+```
+Morphik_local/
+├── hetzner-morphik/     # Полная копия с сервера (backend)
+├── morphik-ui/          # UI для локального запуска
+├── README/              # Документация
+└── .env                 # Главная конфигурация
+```
+
+### Основные файлы:
 - `morphik.toml` - настройки моделей и сервисов
 - `.env` - переменные окружения и API ключи
 - `docker-compose.yml` - конфигурация Docker
+- `core/routes/auth.py` - JWT аутентификация
 
 [Подробная конфигурация →](./README/COMPLETE_DOCUMENTATION_v2.0.md#конфигурация)
 
@@ -119,18 +160,22 @@ open http://localhost:3000
 
 ```bash
 # Push to GitHub & deploy to server
-cd /Users/fedor/PycharmProjects/PythonProject/Morphik_local && \
 git add . && \
 git commit -m "feat: your changes" && \
 git push origin main && \
-ssh root@135.181.106.12 "cd /opt/morphik && git pull && docker-compose restart"
+ssh root@135.181.106.12 "cd /root/morphik-core && \
+  git pull && \
+  docker restart morphik-api"
 ```
 
 ### Deploy Modal Function
 
 ```bash
+cd modal-morphik_test
 modal deploy morphik_processor_fixed.py
 ```
+
+**Note:** API автоматически перезапустится внутри Docker контейнера на сервере
 
 ## 🛠️ Troubleshooting
 
@@ -138,12 +183,19 @@ modal deploy morphik_processor_fixed.py
 
 Быстрая диагностика:
 ```bash
-# Проверка сервисов
+# Проверка локального UI
 docker ps
-curl http://localhost:8000/health
+curl http://localhost:3000
 
-# Логи
-docker logs morphik-colpali-configured -f
+# Проверка API на сервере
+curl http://135.181.106.12:8000/health
+curl http://135.181.106.12:8000/auth/login  # JWT endpoint
+
+# Логи API на сервере
+ssh root@135.181.106.12 "docker logs morphik-api -f"
+
+# Логи локального UI
+docker logs morphik-ui -f
 ```
 
 ## 🤝 Contributing
